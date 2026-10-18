@@ -1,0 +1,123 @@
+
+.form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field label {
+  color: #c7cbd4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  color: #e8eaf0;
+  background: #11151c;
+  border: 1px solid #3a414e;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.2s ease;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: #e7b84b;
+  box-shadow: 0 0 0 2px rgb(231 184 75 / 12%);
+}
+
+.field select {
+  cursor: pointer;
+}
+
+.field option {
+  background: #191e27;
+  color: #e8eaf0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.generateButton,
+.resetButton {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.generateButton {
+  color: #19170f;
+  background: #e7b84b;
+  border: 1px solid #e7b84b;
+}
+
+.generateButton:hover {
+  background: #f3c965;
+  border-color: #f3c965;
+  transform: translateY(-1px);
+}
+
+.resetButton {
+  color: #e8eaf0;
+  background: #242a35;
+  border: 1px solid #3a414e;
+}
+
+.resetButton:hover {
+  background: #303744;
+  border-color: #505a6a;
+}
+
+.generateButton:focus-visible,
+.resetButton:focus-visible {
+  outline: 2px solid #e7b84b;
+  outline-offset: 3px;
+}
+
+@media (max-width: 400px) {
+  .form {
+    padding: 14px;
+  }
+
+  .row {
+    gap: 8px;
+  }
+
+  .field input,
+  .field select {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+}
