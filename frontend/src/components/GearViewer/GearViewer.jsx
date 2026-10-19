@@ -5,7 +5,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import styles from './GearViewer.module.css';
 
-function GearViewer({ gearType, generated }) {
+const API_BASE = 'http://127.0.0.1:8000';
+
+function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
   const mountRef = useRef(null);
   const viewerRef = useRef(null);
 
@@ -33,13 +35,8 @@ function GearViewer({ gearType, generated }) {
       antialias: true,
     });
 
-    renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio, 2)
-    );
-    renderer.setSize(
-      mount.clientWidth,
-      mount.clientHeight
-    );
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.width = '100%';
@@ -48,29 +45,21 @@ function GearViewer({ gearType, generated }) {
 
     mount.appendChild(renderer.domElement);
 
-    // 4. CAD-style camera controls
-    const controls = new OrbitControls(
-      camera,
-      renderer.domElement
-    );
+    // 4. Camera controls
+    const controls = new OrbitControls(camera, renderer.domElement);
 
     controls.enableRotate = true;
     controls.enableZoom = true;
     controls.enablePan = true;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-
-    // Allow complete rotation, including top and bottom views.
     controls.minPolarAngle = 0;
     controls.maxPolarAngle = Math.PI;
-
     controls.minAzimuthAngle = -Infinity;
     controls.maxAzimuthAngle = Infinity;
-
     controls.zoomSpeed = 1;
     controls.panSpeed = 1;
     controls.rotateSpeed = 1;
-
     controls.target.set(0, 0, 0);
     controls.update();
     controls.saveState();
@@ -86,23 +75,14 @@ function GearViewer({ gearType, generated }) {
     fillLight.position.set(-5, 4, -6);
     scene.add(fillLight);
 
-    const sideLight = new THREE.DirectionalLight(
-      '#ffffff',
-      1.5
-    );
+    const sideLight = new THREE.DirectionalLight('#ffffff', 1.5);
     sideLight.position.set(-6, 2, 4);
     scene.add(sideLight);
 
     // 6. Background grid
-    const grid = new THREE.GridHelper(
-      100,
-      100,
-      '#8a9bb5',
-      '#465266'
-    );
+    const grid = new THREE.GridHelper(100, 100, '#8a9bb5', '#465266');
     scene.add(grid);
 
-    // 7. Model group
     let gearGroup = null;
     let disposed = false;
     let modelLoaded = false;
@@ -113,20 +93,21 @@ function GearViewer({ gearType, generated }) {
       roughness: 0.3,
     });
 
-    const modelPath =
-      gearType === 'helical'
+    // A generated URL takes priority over the sample model.
+    // Relative backend URLs must be resolved against FastAPI, not Vite.
+    const modelPath = modelUrl
+      ? modelUrl.startsWith('http')
+        ? modelUrl
+        : `${API_BASE}${modelUrl.startsWith('/') ? '' : '/'}${modelUrl}`
+      : gearType === 'helical'
         ? '/models/helical_gear.glb'
         : '/models/spur_gear.glb';
 
-    // Keep the camera and gear positioned around a common target.
+    // 7. Fit the model inside the viewer.
     function frameModel(model) {
       const originalBounds = new THREE.Box3().setFromObject(model);
-      const center = originalBounds.getCenter(
-        new THREE.Vector3()
-      );
-      const originalSize = originalBounds.getSize(
-        new THREE.Vector3()
-      );
+      const center = originalBounds.getCenter(new THREE.Vector3());
+      const originalSize = originalBounds.getSize(new THREE.Vector3());
 
       const maxSize = Math.max(
         originalSize.x,
@@ -135,49 +116,39 @@ function GearViewer({ gearType, generated }) {
       );
 
       if (!Number.isFinite(maxSize) || maxSize <= 0) {
-        console.error('The loaded gear has invalid dimensions.');
+        console.error('The loaded model has invalid dimensions.');
         return;
       }
 
-      // Center the model.
       model.position.sub(center);
 
       gearGroup = new THREE.Group();
       gearGroup.add(model);
       scene.add(gearGroup);
 
-      // Match the orientation from the Gear-test viewer.
+      // Preserve the existing viewer orientation.
       gearGroup.rotation.x = -Math.PI / 2;
       gearGroup.updateMatrixWorld(true);
 
-      const rotatedBounds = new THREE.Box3().setFromObject(
-        gearGroup
-      );
-
-      // Place the model just above the grid.
+      const rotatedBounds = new THREE.Box3().setFromObject(gearGroup);
       const gap = Math.max(maxSize * 0.08, 0.5);
+
       gearGroup.position.y = -rotatedBounds.min.y + gap;
       gearGroup.updateMatrixWorld(true);
 
-      // Scale the grid to the model.
       grid.scale.setScalar(Math.max(maxSize / 20, 0.1));
       grid.position.set(0, 0, 0);
 
-      // Aim the camera at the gear's center.
-      const modelBounds = new THREE.Box3().setFromObject(
-        gearGroup
-      );
-      const target = modelBounds.getCenter(
-        new THREE.Vector3()
-      );
+      const modelBounds = new THREE.Box3().setFromObject(gearGroup);
+      const target = modelBounds.getCenter(new THREE.Vector3());
 
       controls.target.copy(target);
 
-      // Fit the entire model inside the viewer.
       const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-      const horizontalFov = 2 * Math.atan(
-        Math.tan(verticalFov / 2) * camera.aspect
-      );
+      const horizontalFov =
+        2 * Math.atan(
+          Math.tan(verticalFov / 2) * camera.aspect
+        );
 
       const limitingFov = Math.min(verticalFov, horizontalFov);
       const distance = Math.max(
@@ -204,7 +175,7 @@ function GearViewer({ gearType, generated }) {
       modelLoaded = true;
     }
 
-    // 8. Fallback gear if the requested GLB is unavailable.
+    // 8. Fallback placeholder if a model cannot be loaded.
     function createFallbackGear() {
       const group = new THREE.Group();
       const material = modelMaterial;
@@ -214,12 +185,7 @@ function GearViewer({ gearType, generated }) {
       const toothCount = 24;
 
       const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(
-          radius,
-          radius,
-          thickness,
-          96
-        ),
+        new THREE.CylinderGeometry(radius, radius, thickness, 96),
         material
       );
       group.add(body);
@@ -250,23 +216,13 @@ function GearViewer({ gearType, generated }) {
 
       group.add(
         new THREE.Mesh(
-          new THREE.CylinderGeometry(
-            0.45,
-            0.45,
-            thickness + 0.1,
-            48
-          ),
+          new THREE.CylinderGeometry(0.45, 0.45, thickness + 0.1, 48),
           boreMaterial
         )
       );
 
       const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(
-          0.72,
-          0.72,
-          0.2,
-          48
-        ),
+        new THREE.CylinderGeometry(0.72, 0.72, 0.2, 48),
         material
       );
 
@@ -274,12 +230,7 @@ function GearViewer({ gearType, generated }) {
       group.add(hub);
 
       const hubBore = new THREE.Mesh(
-        new THREE.CylinderGeometry(
-          0.45,
-          0.45,
-          0.4,
-          48
-        ),
+        new THREE.CylinderGeometry(0.45, 0.45, 0.4, 48),
         boreMaterial
       );
 
@@ -289,7 +240,7 @@ function GearViewer({ gearType, generated }) {
       return group;
     }
 
-    // 9. Load the actual GLB model.
+    // 9. Load either the generated assembly or the sample model.
     const loader = new GLTFLoader();
 
     loader.load(
@@ -307,7 +258,12 @@ function GearViewer({ gearType, generated }) {
         model.traverse((child) => {
           if (!child.isMesh) return;
 
-          child.material = modelMaterial;
+          // Keep GLB material colors when available.
+          // Use the default blue material only if none exists.
+          if (!child.material) {
+            child.material = modelMaterial;
+          }
+
           child.castShadow = true;
           child.receiveShadow = true;
         });
@@ -318,21 +274,16 @@ function GearViewer({ gearType, generated }) {
       (error) => {
         if (disposed) return;
 
-        console.warn(
-          `Could not load ${modelPath}; using the placeholder model.`,
-          error
-        );
-
+        console.error(`Could not load model: ${modelPath}`, error);
         frameModel(createFallbackGear());
       }
     );
 
-    // 10. Reset view.
+    // 10. Reset camera view.
     function resetView() {
       controls.reset();
 
       if (gearGroup && modelLoaded) {
-        // Reset camera only: the gear geometry remains unchanged.
         controls.update();
       }
     }
@@ -343,6 +294,8 @@ function GearViewer({ gearType, generated }) {
     let animationFrame;
 
     function animate() {
+      if (disposed) return;
+
       animationFrame = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
@@ -350,22 +303,19 @@ function GearViewer({ gearType, generated }) {
 
     animate();
 
-    // 12. Responsive resizing.
+    // 12. Resize the viewer responsively.
     const resizeObserver = new ResizeObserver(() => {
       if (!mount.clientWidth || !mount.clientHeight) return;
 
       camera.aspect = mount.clientWidth / mount.clientHeight;
       camera.updateProjectionMatrix();
 
-      renderer.setSize(
-        mount.clientWidth,
-        mount.clientHeight
-      );
+      renderer.setSize(mount.clientWidth, mount.clientHeight);
     });
 
     resizeObserver.observe(mount);
 
-    // 13. Cleanup.
+    // 13. Cleanup when the gear type or generated model changes.
     return () => {
       disposed = true;
       cancelAnimationFrame(animationFrame);
@@ -376,13 +326,11 @@ function GearViewer({ gearType, generated }) {
         if (object.geometry) object.geometry.dispose();
 
         if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach((material) => {
-              material.dispose();
-            });
-          } else {
-            object.material.dispose();
-          }
+          const materials = Array.isArray(object.material)
+            ? object.material
+            : [object.material];
+
+          materials.forEach((material) => material.dispose());
         }
       });
 
@@ -394,7 +342,7 @@ function GearViewer({ gearType, generated }) {
 
       viewerRef.current = null;
     };
-  }, [gearType]);
+  }, [gearType, modelUrl]);
 
   function resetView() {
     viewerRef.current?.resetView?.();
@@ -408,7 +356,11 @@ function GearViewer({ gearType, generated }) {
         <div className={styles.modelInfo}>
           <span className={styles.statusDot} />
 
-          {generated ? 'Preview generated' : 'Sample model'}
+          {modelUrl
+            ? 'Generated 3D model'
+            : generated
+              ? 'Design successful'
+              : 'Sample model'}
 
           <span className={styles.typeLabel}>
             {gearType === 'spur' ? 'Spur' : 'Helical'}
