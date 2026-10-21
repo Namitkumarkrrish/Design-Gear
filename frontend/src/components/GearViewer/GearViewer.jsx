@@ -1,5 +1,5 @@
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -10,16 +10,54 @@ const API_BASE = 'http://127.0.0.1:8000';
 function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
   const mountRef = useRef(null);
   const viewerRef = useRef(null);
+  const containerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Track fullscreen changes, including when the user presses Escape.
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(
+        document.fullscreenElement === containerRef.current
+      );
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener(
+        'fullscreenchange',
+        handleFullscreenChange
+      );
+    };
+  }, []);
+
+  async function toggleFullscreen() {
+    const container = containerRef.current;
+
+    if (!container) return;
+
+    try {
+      if (document.fullscreenElement === container) {
+        await document.exitFullscreen();
+      } else {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        }
+
+        await container.requestFullscreen();
+      }
+    } catch (error) {
+      console.error('Could not toggle fullscreen:', error);
+    }
+  }
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
 
-    // 1. Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#202530');
+    scene.background = new THREE.Color('#f1eee5');
 
-    // 2. Camera
     const camera = new THREE.PerspectiveCamera(
       45,
       Math.max(mount.clientWidth, 1) /
@@ -30,10 +68,7 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
 
     camera.position.set(10, 8, 12);
 
-    // 3. Renderer
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-    });
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -45,7 +80,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
 
     mount.appendChild(renderer.domElement);
 
-    // 4. Camera controls
     const controls = new OrbitControls(camera, renderer.domElement);
 
     controls.enableRotate = true;
@@ -64,7 +98,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
     controls.update();
     controls.saveState();
 
-    // 5. Lighting
     scene.add(new THREE.AmbientLight('#ffffff', 1.5));
 
     const keyLight = new THREE.DirectionalLight('#ffffff', 3);
@@ -79,8 +112,12 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
     sideLight.position.set(-6, 2, 4);
     scene.add(sideLight);
 
-    // 6. Background grid
-    const grid = new THREE.GridHelper(100, 100, '#8a9bb5', '#465266');
+    const grid = new THREE.GridHelper(
+      100,
+      100,
+      '#c8bda9',
+      '#e1dacb'
+    );
     scene.add(grid);
 
     let gearGroup = null;
@@ -88,13 +125,11 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
     let modelLoaded = false;
 
     const modelMaterial = new THREE.MeshStandardMaterial({
-      color: '#4682b4',
-      metalness: 0.65,
-      roughness: 0.3,
+      color: '#b66b42',
+      metalness: 0.45,
+      roughness: 0.4,
     });
 
-    // A generated URL takes priority over the sample model.
-    // Relative backend URLs must be resolved against FastAPI, not Vite.
     const modelPath = modelUrl
       ? modelUrl.startsWith('http')
         ? modelUrl
@@ -103,7 +138,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
         ? '/models/helical_gear.glb'
         : '/models/spur_gear.glb';
 
-    // 7. Fit the model inside the viewer.
     function frameModel(model) {
       const originalBounds = new THREE.Box3().setFromObject(model);
       const center = originalBounds.getCenter(new THREE.Vector3());
@@ -126,7 +160,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
       gearGroup.add(model);
       scene.add(gearGroup);
 
-      // Preserve the existing viewer orientation.
       gearGroup.rotation.x = -Math.PI / 2;
       gearGroup.updateMatrixWorld(true);
 
@@ -175,7 +208,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
       modelLoaded = true;
     }
 
-    // 8. Fallback placeholder if a model cannot be loaded.
     function createFallbackGear() {
       const group = new THREE.Group();
       const material = modelMaterial;
@@ -209,8 +241,8 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
       }
 
       const boreMaterial = new THREE.MeshStandardMaterial({
-        color: '#202530',
-        metalness: 0.3,
+        color: '#e1dacb',
+        metalness: 0.2,
         roughness: 0.8,
       });
 
@@ -240,7 +272,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
       return group;
     }
 
-    // 9. Load either the generated assembly or the sample model.
     const loader = new GLTFLoader();
 
     loader.load(
@@ -249,6 +280,14 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
         if (disposed) {
           gltf.scene.traverse((object) => {
             if (object.geometry) object.geometry.dispose();
+
+            if (object.material) {
+              const materials = Array.isArray(object.material)
+                ? object.material
+                : [object.material];
+
+              materials.forEach((material) => material.dispose());
+            }
           });
           return;
         }
@@ -258,8 +297,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
         model.traverse((child) => {
           if (!child.isMesh) return;
 
-          // Keep GLB material colors when available.
-          // Use the default blue material only if none exists.
           if (!child.material) {
             child.material = modelMaterial;
           }
@@ -279,7 +316,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
       }
     );
 
-    // 10. Reset camera view.
     function resetView() {
       controls.reset();
 
@@ -290,7 +326,6 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
 
     viewerRef.current = { resetView, controls };
 
-    // 11. Render loop.
     let animationFrame;
 
     function animate() {
@@ -303,19 +338,16 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
 
     animate();
 
-    // 12. Resize the viewer responsively.
     const resizeObserver = new ResizeObserver(() => {
       if (!mount.clientWidth || !mount.clientHeight) return;
 
       camera.aspect = mount.clientWidth / mount.clientHeight;
       camera.updateProjectionMatrix();
-
       renderer.setSize(mount.clientWidth, mount.clientHeight);
     });
 
     resizeObserver.observe(mount);
 
-    // 13. Cleanup when the gear type or generated model changes.
     return () => {
       disposed = true;
       cancelAnimationFrame(animationFrame);
@@ -349,7 +381,10 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
   }
 
   return (
-    <div className={styles.container}>
+    <div
+      className={styles.container}
+      ref={containerRef}
+    >
       <div className={styles.viewer} ref={mountRef} />
 
       <div className={styles.toolbar}>
@@ -371,11 +406,21 @@ function GearViewer({ gearType = 'spur', generated = false, modelUrl = null }) {
           <button type="button" onClick={resetView}>
             Reset View
           </button>
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'View gear fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen (Esc)' : 'View gear fullscreen'}
+          >
+            {isFullscreen ? '✕ Exit Fullscreen' : '⛶ Full Screen'}
+          </button>
         </div>
       </div>
 
       <p className={styles.hint}>
         Drag to rotate freely · Right-drag to pan · Scroll to zoom
+        {isFullscreen ? ' · Press Esc to exit fullscreen' : ''}
       </p>
     </div>
   );

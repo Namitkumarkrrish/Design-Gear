@@ -1,35 +1,47 @@
 
-/* ========================================
-   1. GLOBAL STYLES
-======================================== */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
-  color: #e8eaf0;
-  background: #101319;
+  font-family: 'DM Sans', sans-serif;
+  color: #29271f;
+  background: #f6f3eb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg: #101319;
-  --panel: #191e27;
-  --panel-light: #202631;
-  --border: #303744;
-  --text: #e8eaf0;
-  --muted: #929baa;
-  --gold: #e7b84b;
-  --gold-hover: #f3c965;
+  --bg: #f6f3eb;
+  --paper: #fffdf7;
+  --paper-dark: #eee9dc;
+  --border: #dcd5c5;
+  --text: #29271f;
+  --muted: #827d70;
+  --rust: #b64e32;
+  --rust-dark: #963c25;
+  --olive: #667044;
+  --sand: #eae2d0;
+  --mono: 'DM Mono', monospace;
+  --heading: 'Space Grotesk', sans-serif;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: var(--bg);
+  color: var(--text);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgb(104 93 69 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(104 93 69 / 5%) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 button,
@@ -45,30 +57,29 @@ button {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
+  outline: 2px solid var(--rust);
+  outline-offset: 3px;
 }
 
 #root {
   min-height: 100vh;
 }
 
-/* ========================================
-   2. APPLICATION LAYOUT
-======================================== */
 .app {
   min-height: 100vh;
   color: var(--text);
 }
 
+/* HEADER */
+
 .topbar {
   min-height: 76px;
-  padding: 0 32px;
+  padding: 0 clamp(18px, 4vw, 64px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  background: #171b23;
+  background: #fbf9f2;
   border-bottom: 1px solid var(--border);
 }
 
@@ -76,71 +87,260 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .brand-icon {
-  color: var(--gold);
-  font-size: 32px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--rust);
+  font-size: 30px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
-.brand h1 {
+/* Explicit colors prevent the two brand words from inheriting
+   conflicting or previously defined styles. */
+.topbar .brand h1 {
   margin: 0;
-  font-size: 21px;
+  color: #29271f !important;
+  font-family: var(--heading);
+  font-size: 19px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
-.brand h1 span {
-  color: var(--gold);
+.topbar .brand h1 span {
+  color: #b64e32 !important;
 }
 
 .navigation {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .nav-item {
-  padding: 10px 15px;
-  color: var(--muted);
+  padding: 10px 14px;
+  color: #777265;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 600;
   transition: 0.2s ease;
 }
 
 .nav-item:hover,
 .nav-item.active {
-  color: var(--gold);
-  background: #29271f;
-  border-color: #51452b;
+  color: #b64e32;
+  background: #f4e9dd;
+  border-color: #e5c8b8;
 }
 
-/* ========================================
-   3. DASHBOARD GRID
-======================================== */
+/* HERO */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(250px, 0.8fr);
+  align-items: center;
+  gap: 36px;
+  padding: clamp(32px, 5vw, 68px) clamp(20px, 5vw, 72px);
+  background: var(--sand);
+  border-bottom: 1px solid #d5c9b3;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  right: 12%;
+  top: -190px;
+  border: 1px solid rgb(182 78 50 / 15%);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 28px rgb(182 78 50 / 4%),
+    0 0 0 58px rgb(182 78 50 / 3%);
+  pointer-events: none;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 20px;
+  color: var(--olive);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  content: '';
+  width: 23px;
+  height: 2px;
+  background: var(--olive);
+}
+
+.hero h2 {
+  max-width: 760px;
+  margin: 0;
+  color: #29271f;
+  font-family: var(--heading);
+  font-size: clamp(34px, 5.2vw, 66px);
+  font-weight: 700;
+  line-height: 1.03;
+  letter-spacing: -2.8px;
+  text-transform: uppercase;
+}
+
+.hero h2 span {
+  color: var(--rust);
+}
+
+.hero-description {
+  max-width: 570px;
+  margin: 22px 0 0;
+  color: #6f6a5e;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.hero-steps {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid #cfc3ad;
+}
+
+.hero-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 17px 0;
+  border-bottom: 1px solid #cfc3ad;
+}
+
+.step-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  color: var(--rust);
+  border: 1px solid #c9a58f;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-text strong {
+  color: var(--text);
+  font-family: var(--heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.step-text small {
+  color: #817969;
+  font-size: 11px;
+}
+
+/* WORKSPACE HEADING */
+
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 30px clamp(18px, 4vw, 64px) 0;
+}
+
+.dashboard-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--heading);
+  font-size: 19px;
+  letter-spacing: -0.5px;
+}
+
+.dashboard-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dashboard-index {
+  color: var(--olive);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+/* DASHBOARD PANELS */
+
 .dashboard {
   display: grid;
-  grid-template-columns: minmax(270px, 0.85fr) minmax(270px, 0.85fr) minmax(350px, 1.5fr);
-  gap: 20px;
-  padding: 24px;
+  grid-template-columns:
+    minmax(260px, 0.88fr)
+    minmax(280px, 0.92fr)
+    minmax(340px, 1.35fr);
   align-items: start;
+  gap: 18px;
+  padding: 20px clamp(18px, 4vw, 64px) 56px;
 }
 
 .panel {
   min-width: 0;
   overflow: hidden;
-  background: var(--panel);
+  background: var(--paper);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-top: 3px solid var(--rust);
+  border-radius: 2px;
+  box-shadow: 0 4px 14px rgb(56 45 27 / 4%);
 }
 
 .panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  padding: 18px 20px;
-  font-size: 16px;
-  font-weight: 650;
+  padding: 17px 18px;
+  color: var(--text);
+  background: #fbf8f0;
   border-bottom: 1px solid var(--border);
+  font-family: var(--heading);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.panel h2 .panel-number {
+  color: var(--rust);
+  font-family: var(--mono);
+  font-size: 10px;
 }
 
 .input-panel,
@@ -156,211 +356,44 @@ select:focus-visible {
   min-height: 500px;
 }
 
-/* ========================================
-   4. SHARED FORM ELEMENTS
-======================================== */
-.form-content,
-.results-content {
-  padding: 20px;
-}
-
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 19px;
-}
-
-.field-group label {
-  color: #c7cbd4;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.field-group input,
-.field-group select {
-  width: 100%;
-  min-width: 0;
-  padding: 11px 12px;
-  color: var(--text);
-  background: #11151c;
-  border: 1px solid #3a414e;
-  border-radius: 7px;
-}
-
-.field-group input:focus,
-.field-group select:focus {
-  border-color: var(--gold);
-  outline: none;
-}
-
-.field-group small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.field-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.field-row .field-group {
-  min-width: 0;
-}
-
-.primary-button,
-.secondary-button {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: 7px;
-  font-weight: 700;
-  transition: 0.2s ease;
-}
-
-.primary-button {
-  color: #19170f;
-  background: var(--gold);
-  border: 1px solid var(--gold);
-}
-
-.primary-button:hover {
-  background: var(--gold-hover);
-}
-
-.secondary-button {
-  margin-top: 10px;
-  color: var(--text);
-  background: #242a35;
-  border: 1px solid #3a414e;
-}
-
-.secondary-button:hover {
-  background: #303744;
-}
-
-.button-row {
-  display: flex;
-  gap: 10px;
-}
-
-.button-row > * {
-  flex: 1;
-}
-
-/* ========================================
-   5. RESULTS
-======================================== */
-.result-card {
-  margin-bottom: 12px;
-  padding: 15px;
-  background: #202631;
-  border: 1px solid #303744;
-  border-radius: 9px;
-}
-
-.result-label {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.result-value {
-  margin-top: 7px;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.result-unit {
-  margin-left: 5px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.status-message {
-  margin-top: 16px;
+.panel-error {
+  margin: 0 18px 18px;
   padding: 12px;
-  color: #b8c3d2;
-  background: #202631;
-  border-radius: 7px;
+  color: #963c25;
+  background: #f9e9e2;
+  border: 1px solid #e8c5b7;
   font-size: 12px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
-/* ========================================
-   6. THREE.JS VIEWER
-======================================== */
-.gear-viewer {
-  position: relative;
-  width: 100%;
-  min-height: 430px;
-  overflow: hidden;
-  background: #121720;
-}
-
-.gear-viewer canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.viewer-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.viewer-loading {
+  margin: 0;
   padding: 12px 16px;
   color: var(--muted);
-  background: #1c222c;
-  border-top: 1px solid var(--border);
+  background: var(--paper);
   font-size: 12px;
 }
 
-.viewer-controls {
+/* FOOTER */
+
+.footer {
   display: flex;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.viewer-controls button {
-  padding: 7px 10px;
-  color: var(--text);
-  background: #292f3a;
-  border: 1px solid #404856;
-  border-radius: 6px;
-}
-
-.viewer-controls button:hover {
-  color: var(--gold);
-  border-color: var(--gold);
-}
-
-.empty-state {
-  display: flex;
-  min-height: 280px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 12px;
-  padding: 24px;
-  color: var(--muted);
-  text-align: center;
+  padding: 17px clamp(18px, 4vw, 64px);
+  color: #827b6d;
+  background: #efeadf;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
 }
 
-.empty-state .empty-icon {
-  color: var(--gold);
-  font-size: 42px;
-}
+/* RESPONSIVE */
 
-.muted-text {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* ========================================
-   7. RESPONSIVE DESIGN
-======================================== */
-@media (max-width: 1150px) {
+@media (max-width: 1250px) {
   .dashboard {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -368,13 +401,18 @@ select:focus-visible {
   .viewer-section {
     grid-column: 1 / -1;
   }
+
+  .hero {
+    grid-template-columns: minmax(0, 1.3fr) minmax(230px, 0.7fr);
+  }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 760px) {
   .topbar {
-    padding: 16px;
     align-items: flex-start;
     flex-direction: column;
+    gap: 14px;
+    padding: 16px 18px;
   }
 
   .navigation {
@@ -384,13 +422,38 @@ select:focus-visible {
 
   .nav-item {
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: 11px;
+  }
+
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding: 36px 20px;
+  }
+
+  .hero h2 {
+    font-size: clamp(34px, 9vw, 52px);
+    letter-spacing: -1.8px;
+  }
+
+  .hero-description {
+    font-size: 13px;
+  }
+
+  .hero-steps {
+    max-width: 480px;
+  }
+
+  .dashboard-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 25px 18px 0;
   }
 
   .dashboard {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-    padding: 14px;
+    padding: 16px 18px 36px;
   }
 
   .viewer-section {
@@ -402,12 +465,13 @@ select:focus-visible {
   .results-panel {
     min-height: 0;
   }
+}
 
-  .gear-viewer {
-    min-height: 320px;
-  }
-
-  .field-row {
-    gap: 10px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

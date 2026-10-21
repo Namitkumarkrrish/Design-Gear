@@ -6,63 +6,77 @@
 .summary {
   padding: 16px;
   margin-bottom: 16px;
-  background: #202631;
-  border: 1px solid #303744;
-  border-radius: 9px;
+  background: #f3eee2;
+  border: 1px solid #dcd1bc;
+  border-left: 3px solid #b64e32;
+  border-radius: 2px;
 }
 
 .summaryLabel {
-  color: #e7b84b;
+  color: #667044;
+  font-family: 'DM Mono', monospace;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 1.2px;
 }
 
 .summary h3 {
   margin: 9px 0 6px;
-  color: #e8eaf0;
+  color: #29271f;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 19px;
+  line-height: 1.35;
 }
 
 .summary p {
   margin: 0;
-  color: #929baa;
+  color: #827d70;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .resultsGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .resultCard {
   min-width: 0;
   padding: 14px;
-  background: #202631;
-  border: 1px solid #303744;
-  border-radius: 9px;
+  background: #fffdf7;
+  border: 1px solid #e1dacb;
+  border-radius: 2px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.resultCard:hover {
+  border-color: #c7b59e;
+  transform: translateY(-1px);
 }
 
 .resultLabel {
   display: block;
-  color: #929baa;
+  color: #827d70;
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .resultValue {
   margin-top: 9px;
-  color: #e8eaf0;
+  color: #29271f;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 20px;
   font-weight: 700;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .resultUnit {
   margin-left: 5px;
-  color: #929baa;
+  color: #827d70;
+  font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 400;
 }
@@ -70,12 +84,13 @@
 .note {
   margin: 16px 0 0;
   padding: 12px;
-  color: #c3b78f;
-  background: #29271f;
-  border: 1px solid #51452b;
-  border-radius: 7px;
+  color: #626b40;
+  background: #f0f0e4;
+  border: 1px solid #d9dbc6;
+  border-radius: 2px;
   font-size: 11px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .emptyState {
@@ -89,20 +104,21 @@
 }
 
 .emptyIcon {
-  color: #e7b84b;
+  color: #b64e32;
   font-size: 42px;
 }
 
 .emptyState h3 {
   margin: 16px 0 8px;
-  color: #e8eaf0;
+  color: #29271f;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 16px;
 }
 
 .emptyState p {
   max-width: 260px;
   margin: 0;
-  color: #929baa;
+  color: #827d70;
   font-size: 12px;
   line-height: 1.7;
 }
