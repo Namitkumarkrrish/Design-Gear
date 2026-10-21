@@ -1,21 +1,122 @@
 
 import math
+from copy import deepcopy
 
 
-# Standard modules from your original code.
 MODULE_STANDARDS = [
-    1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0,
-    6.0, 7.5, 8.0, 10.0, 12.0, 16.0, 20.0,
-    25.0, 32.0, 40.0, 50.0
+    1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6,
+    7.5, 8, 10, 12, 16, 20, 25, 32, 40, 50
 ]
+
+MAX_FACE_WIDTH_FACTOR = 15
+MAX_BHN = 400
+MIN_BHN = 25
+
+
+def _number(data, key, default=None):
+    value = data.get(key, default)
+
+    if value is None:
+        raise ValueError(f"Missing required input: {key}")
+
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be numeric.")
+
+    if not math.isfinite(value):
+        raise ValueError(f"{key} must be a finite number.")
+
+    return value
+
+
+def validate_inputs(data):
+    required = [
+        "power",
+        "pinion_rpm",
+        "gear_ratio",
+        "pressure_angle",
+        "pinion_strength",
+        "gear_strength",
+        "service_factor",
+        "bhn",
+        "factor_of_safety",
+        "pinion_modulus",
+        "gear_modulus",
+        "face_width_factor",
+        "gear_system",
+    ]
+
+    for key in required:
+        if key not in data:
+            raise ValueError(f"Missing required input: {key}")
+
+    numeric_keys = [
+        "power",
+        "pinion_rpm",
+        "gear_ratio",
+        "pressure_angle",
+        "pinion_strength",
+        "gear_strength",
+        "service_factor",
+        "bhn",
+        "factor_of_safety",
+        "pinion_modulus",
+        "gear_modulus",
+        "face_width_factor",
+    ]
+
+    for key in numeric_keys:
+        value = _number(data, key)
+
+        if value <= 0:
+            raise ValueError(f"{key} must be greater than zero.")
+
+    if _number(data, "service_factor") < 1:
+        raise ValueError("Service factor must be at least 1.")
+
+    if _number(data, "factor_of_safety") < 1:
+        raise ValueError("Factor of safety must be at least 1.")
+
+    if _number(data, "gear_ratio") < 1:
+        raise ValueError("Gear ratio must be at least 1.")
+
+    if _number(data, "pressure_angle") > 45:
+        raise ValueError("Pressure angle must not exceed 45 degrees.")
+
+    if _number(data, "face_width_factor") > MAX_FACE_WIDTH_FACTOR:
+        raise ValueError(
+            f"Face-width factor must not exceed "
+            f"{MAX_FACE_WIDTH_FACTOR}."
+        )
+
+    bhn = _number(data, "bhn")
+    if not MIN_BHN < bhn <= MAX_BHN:
+        raise ValueError(
+            f"BHN must be greater than {MIN_BHN} "
+            f"and at most {MAX_BHN}."
+        )
+
+    if data["gear_system"] not in (
+        "20fdi",
+        "20stub",
+        "14.5fdi",
+    ):
+        raise ValueError("Unsupported gear system.")
+
+    return data
 
 
 def calculate_module(T, So, y, z, n, x):
-    """Calculate the required module using the original iteration."""
+    """Iteratively estimate the required module."""
+    if min(T, So, y, z, n, x) <= 0:
+        raise ValueError(
+            "Module calculation inputs must be greater than zero."
+        )
+
     Cv = 0.5
     r = (2 * T) / (So * x * y * z)
     r1 = (math.pi * z * n) / 60000
-
     mo = (r / Cv) ** (1 / 3)
 
     for _ in range(1000):
@@ -28,32 +129,34 @@ def calculate_module(T, So, y, z, n, x):
 
         mo = m1
 
-    raise ValueError("Module calculation did not converge.")
+    return mo
 
 
 def select_standard_module(required_module):
-    """Choose the first standard module >= the required module."""
-    for standard in MODULE_STANDARDS:
-        if required_module <= standard:
-            return standard
+    for module in MODULE_STANDARDS:
+        if module >= required_module:
+            return module
 
-    # Preserve the original program's fallback to its largest module.
     return MODULE_STANDARDS[-1]
 
 
 def calculate_geometry(module, zp, zg, x, pinion_rpm):
-    """Calculate gear geometry and velocity factor."""
-    Dp = module * zp
-    Dg = module * zg
+    dp = module * zp
+    dg = module * zg
     b = module * x
-    v = (math.pi * Dp * pinion_rpm) / 60000
-    Cv = 3 / (v + 3)
+    velocity = math.pi * dp * pinion_rpm / 60000
+    cv = 3 / (velocity + 3)
 
-    return Dp, Dg, b, v, Cv
+    return {
+        "pinion_pitch_diameter": dp,
+        "gear_pitch_diameter": dg,
+        "face_width": b,
+        "velocity": velocity,
+        "velocity_factor": cv,
+    }
 
 
 def bending_check(Tp, Dp, module, y, So, b):
-    """Return bending safety, bending capacity, and tangential force."""
     Ft = 2 * Tp / Dp
     Sb = module * b * So * y
 
@@ -61,390 +164,377 @@ def bending_check(Tp, Dp, module, y, So, b):
 
 
 def wear_check(Ft, Cv, Dp, b, BHN, Ep, Eg, zg, zp, fi):
-    """Return wear safety, wear force, and dynamic force."""
-    Fd = Ft / Cv
+    dynamic_force = Ft / Cv
     Senc = 2.8 * BHN - 70
 
     k = (
-        ((Senc ** 2) * math.sin(math.radians(fi))) / 1.4
-    ) * ((1 / Ep) + (1 / Eg))
+        (Senc ** 2)
+        * math.sin(math.radians(fi))
+        / 1.4
+        * ((1 / Ep) + (1 / Eg))
+    )
 
-    Q = (2 * zg) / (zg + zp)
+    Q = 2 * zg / (zg + zp)
     Fw = Dp * b * k * Q
+    required_wear_force = 1.15 * dynamic_force
 
-    return Fw >= 1.15 * Fd, Fw, Fd
-
-
-def validate_inputs(data):
-    """Validate the input values received from the frontend."""
-    required = [
-        "power", "pinion_rpm", "gear_ratio", "pressure_angle",
-        "pinion_strength", "gear_strength", "service_factor",
-        "bhn", "gear_system", "factor_of_safety",
-        "pinion_modulus", "gear_modulus", "face_width_factor"
-    ]
-
-    missing = [key for key in required if key not in data]
-    if missing:
-        raise ValueError("Missing inputs: " + ", ".join(missing))
-
-    numeric_keys = [
-        "power", "pinion_rpm", "gear_ratio", "pressure_angle",
-        "pinion_strength", "gear_strength", "service_factor",
-        "bhn", "factor_of_safety", "pinion_modulus",
-        "gear_modulus", "face_width_factor"
-    ]
-
-    values = {}
-    for key in numeric_keys:
-        try:
-            values[key] = float(data[key])
-        except (TypeError, ValueError):
-            raise ValueError(f"{key} must be a number.")
-
-        if not math.isfinite(values[key]):
-            raise ValueError(f"{key} must be a finite number.")
-
-    positive_keys = [
-        "power", "pinion_rpm", "gear_ratio", "pressure_angle",
-        "pinion_strength", "gear_strength", "bhn",
-        "pinion_modulus", "gear_modulus", "face_width_factor"
-    ]
-
-    for key in positive_keys:
-        if values[key] <= 0:
-            raise ValueError(f"{key} must be greater than zero.")
-
-    if values["service_factor"] < 1:
-        raise ValueError("service_factor must be at least 1.")
-
-    if values["factor_of_safety"] < 1:
-        raise ValueError("factor_of_safety must be at least 1.")
-
-    if values["gear_ratio"] < 1:
-        raise ValueError("gear_ratio must be at least 1.")
-
-    if values["pressure_angle"] > 45:
-        raise ValueError("pressure_angle must not exceed 45 degrees.")
-
-    if values["face_width_factor"] > 15:
-        raise ValueError("face_width_factor must not exceed 15.")
-
-    if 2.8 * values["bhn"] - 70 <= 0:
-        raise ValueError("BHN makes the wear formula invalid.")
-
-    gear_system = str(data["gear_system"]).strip().lower()
-    if gear_system not in ("20fdi", "20stub", "14.5fdi"):
-        raise ValueError(
-            "gear_system must be 20fdi, 20stub, or 14.5fdi."
-        )
-
-    values["gear_system"] = gear_system
-    return values
+    return (
+        Fw >= required_wear_force,
+        Fw,
+        dynamic_force,
+        required_wear_force,
+    )
 
 
 def get_available_options(state):
-    """Return the same three choices as the original program."""
-    x = state["face_width_factor"]
-    BHN = state["bhn"]
+    """
+    Return every currently available adjustment.
 
-    if x < 15:
-        return [
-            {
-                "id": 1,
-                "label": "Increase face-width factor",
-                "minimum": x,
-                "maximum": 15
-            }
-        ]
+    Options are independent: the user does not have to exhaust
+    face-width or BHN adjustments before increasing the module.
+    """
+    options = []
 
-    if BHN < 400:
-        return [
-            {
-                "id": 2,
-                "label": "Increase Brinell hardness number",
-                "minimum": BHN,
-                "maximum": 400
-            }
-        ]
+    x = float(state["face_width_factor"])
+    bhn = float(state["bhn"])
+    module_index = int(state["module_index"])
 
-    module_index = state["module_index"]
+    if x < MAX_FACE_WIDTH_FACTOR:
+        options.append({
+            "id": 1,
+            "label": "Increase face-width factor",
+            "minimum": x,
+            "maximum": MAX_FACE_WIDTH_FACTOR,
+        })
+
+    if bhn < MAX_BHN:
+        options.append({
+            "id": 2,
+            "label": "Increase Brinell hardness number (BHN)",
+            "minimum": bhn,
+            "maximum": MAX_BHN,
+        })
 
     if module_index + 1 < len(MODULE_STANDARDS):
-        return [
-            {
-                "id": 3,
-                "label": "Increase module to the next standard size",
-                "next_module": MODULE_STANDARDS[module_index + 1]
-            }
-        ]
+        options.append({
+            "id": 3,
+            "label": "Increase to the next standard module",
+            "next_module": MODULE_STANDARDS[module_index + 1],
+        })
 
-    return []
+    return options
+
+
+def _recalculate_module(state):
+    if state["weaker_member"] == "pinion":
+        y = state["pinion_lewis_factor"]
+        z = state["pinion_teeth"]
+        n = state["pinion_rpm"]
+        So = state["allowable_pinion_stress"]
+    else:
+        y = state["gear_lewis_factor"]
+        z = state["gear_teeth"]
+        n = state["gear_rpm"]
+        So = state["allowable_gear_stress"]
+
+    required_module = calculate_module(
+        state["design_torque"],
+        So,
+        y,
+        z,
+        n,
+        state["face_width_factor"],
+    )
+
+    module = select_standard_module(required_module)
+
+    state["required_module"] = required_module
+    state["module"] = module
+    state["module_index"] = MODULE_STANDARDS.index(module)
 
 
 def run_checks(state):
-    """Calculate current results and decide whether the design is complete."""
-    zp = state["pinion_teeth"]
-    zg = state["gear_teeth"]
-    Np = state["pinion_rpm"]
-    Ng = state["gear_rpm"]
-    fi = state["pressure_angle"]
-    x = state["face_width_factor"]
-    BHN = state["bhn"]
-    module = state["module"]
-    Tp = state["pinion_torque"]
-    Ep = state["pinion_modulus"]
-    Eg = state["gear_modulus"]
+    state = deepcopy(state)
 
-    Dp, Dg, b, v, Cv = calculate_geometry(
-        module, zp, zg, x, Np
+    module = float(state["module"])
+    zp = int(state["pinion_teeth"])
+    zg = int(state["gear_teeth"])
+    x = float(state["face_width_factor"])
+    bhn = float(state["bhn"])
+
+    geometry = calculate_geometry(
+        module,
+        zp,
+        zg,
+        x,
+        float(state["pinion_rpm"]),
     )
 
-    bending_safe, Sb, Ft = bending_check(
-        Tp, Dp, module,
-        state["pinion_lewis_factor"],
-        state["allowable_pinion_stress"],
-        b
+    dp = geometry["pinion_pitch_diameter"]
+    dg = geometry["gear_pitch_diameter"]
+    b = geometry["face_width"]
+    velocity = geometry["velocity"]
+    cv = geometry["velocity_factor"]
+
+    if state["weaker_member"] == "pinion":
+        y = state["pinion_lewis_factor"]
+        So = state["allowable_pinion_stress"]
+    else:
+        y = state["gear_lewis_factor"]
+        So = state["allowable_gear_stress"]
+
+    bending_safe, bending_capacity, Ft = bending_check(
+        state["design_torque"],
+        dp,
+        module,
+        y,
+        So,
+        b,
     )
 
-    wear_safe, Fw, Fd = wear_check(
-        Ft, Cv, Dp, b, BHN, Ep, Eg, zg, zp, fi
+    wear_safe, wear_force, dynamic_force, required_wear_force = (
+        wear_check(
+            Ft,
+            cv,
+            dp,
+            b,
+            bhn,
+            float(state["pinion_modulus"]),
+            float(state["gear_modulus"]),
+            zg,
+            zp,
+            float(state["pressure_angle"]),
+        )
     )
 
-    state["results"] = {
+    all_safe = bending_safe and wear_safe
+
+    results = {
         "module": module,
         "required_module": state["required_module"],
         "pinion_teeth": zp,
         "gear_teeth": zg,
-        "pinion_pitch_diameter": Dp,
-        "gear_pitch_diameter": Dg,
+        "pinion_pitch_diameter": dp,
+        "gear_pitch_diameter": dg,
         "face_width": b,
-        "velocity": v,
-        "velocity_factor": Cv,
+        "velocity": velocity,
+        "velocity_factor": cv,
         "pinion_lewis_factor": state["pinion_lewis_factor"],
         "gear_lewis_factor": state["gear_lewis_factor"],
-        "bending_stress": Sb,
+        "bending_stress": bending_capacity,
         "tangential_force": Ft,
-        "wear_force": Fw,
-        "dynamic_force": Fd,
-        "pinion_torque": Tp,
-        "design_torque": state["design_torque"]
+        "wear_force": wear_force,
+        "dynamic_force": dynamic_force,
+        "required_wear_force": required_wear_force,
+        "pinion_torque": state["pinion_torque"],
+        "design_torque": state["design_torque"],
+        "bhn": bhn,
     }
 
-    state["checks"] = {
+    checks = {
         "bending_safe": bending_safe,
         "wear_safe": wear_safe,
-        "all_safe": bending_safe and wear_safe
+        "all_safe": all_safe,
     }
 
-    if state["checks"]["all_safe"]:
-        state["status"] = "success"
-        state["message"] = "All design checks satisfied."
-        state["options"] = []
-        return state
-
-    options = get_available_options(state)
-
-    if options:
-        state["status"] = "needs_user_choice"
-        state["message"] = (
-            "A safety check failed. Choose an available option to continue."
-        )
-        state["options"] = options
+    if all_safe:
+        status = "success"
+        message = "All implemented design checks passed."
+        options = []
     else:
-        state["status"] = "failed"
-        state["message"] = (
-            "Safety checks still fail at the maximum standard module."
-        )
-        state["options"] = []
+        options = get_available_options(state)
+
+        if options:
+            status = "needs_user_choice"
+            message = (
+                "One or more safety checks failed. "
+                "Choose any available adjustment below."
+            )
+        else:
+            status = "failed"
+            message = (
+                "Safety checks still fail and no further "
+                "adjustments are available."
+            )
+
+    state.update({
+        "results": results,
+        "checks": checks,
+        "status": status,
+        "message": message,
+        "options": options,
+    })
 
     return state
 
 
 def start_spur_design(data):
-    """Start a new spur gear design from frontend input values."""
-    values = validate_inputs(data)
+    validate_inputs(data)
 
-    Power = values["power"]
-    Np = values["pinion_rpm"]
-    i = values["gear_ratio"]
-    fi = values["pressure_angle"]
-    SPut = values["pinion_strength"]
-    SGut = values["gear_strength"]
-    Cs = values["service_factor"]
-    BHN = values["bhn"]
-    fos = values["factor_of_safety"]
-    Ep = values["pinion_modulus"]
-    Eg = values["gear_modulus"]
-    x = values["face_width_factor"]
+    power = float(data["power"])
+    pinion_rpm = float(data["pinion_rpm"])
+    gear_ratio = float(data["gear_ratio"])
+    pressure_angle = float(data["pressure_angle"])
+    service_factor = float(data["service_factor"])
+    fos = float(data["factor_of_safety"])
+    x = float(data["face_width_factor"])
+    bhn = float(data["bhn"])
 
-    Ng = Np / i
+    pinion_strength = float(data["pinion_strength"])
+    gear_strength = float(data["gear_strength"])
 
-    zp = math.ceil(2 / (math.sin(math.radians(fi)) ** 2))
-    zg = math.ceil(i * zp)
+    gear_rpm = pinion_rpm / gear_ratio
 
-    # Preserve the Lewis factor formulas from your supplied code.
-    Yp = 0.484 - (3.28 / zp)
-    Yg = 0.484 - (3.28 / zg)
+    zp = math.ceil(
+        2 / math.sin(math.radians(pressure_angle)) ** 2
+    )
+    zg = math.ceil(gear_ratio * zp)
 
-    if Yp <= 0 or Yg <= 0:
-        raise ValueError("Calculated Lewis form factor is not positive.")
+    if data["gear_system"] == "20fdi":
+        yp = 0.484 - 2.87 / zp
+        yg = 0.484 - 2.87 / zg
+    elif data["gear_system"] == "20stub":
+        yp = 0.8 - 2.0 / zp
+        yg = 0.8 - 2.0 / zg
+    else:
+        yp = 0.124 - 0.684 / zp
+        yg = 0.124 - 0.684 / zg
 
-    So_p = SPut / fos
-    So_g = SGut / fos
+    allowable_pinion = pinion_strength / fos
+    allowable_gear = gear_strength / fos
 
-    if (So_p * Yp) < (So_g * Yg):
+    pinion_comparison = allowable_pinion * yp
+    gear_comparison = allowable_gear * yg
+
+    if pinion_comparison <= gear_comparison:
         weaker_member = "pinion"
-        y, n, z, So = Yp, Np, zp, So_p
+        y = yp
+        z = zp
+        n = pinion_rpm
+        So = allowable_pinion
     else:
         weaker_member = "gear"
-        y, n, z, So = Yg, Ng, zg, So_g
+        y = yg
+        z = zg
+        n = gear_rpm
+        So = allowable_gear
 
-    # Keep both torque calculations as in your original program.
-    Tp = Cs * ((60e6 * Power) / (2 * math.pi * Np))
-    T_design = Cs * ((60e6 * Power) / (2 * math.pi * n))
+    # Convert power and rotational speed into N·mm.
+    pinion_torque = (
+        60 * 1e6 * power
+    ) / (2 * math.pi * pinion_rpm)
 
-    m_calc = calculate_module(T_design, So, y, z, n, x)
-    module = select_standard_module(m_calc)
+    design_torque = service_factor * pinion_torque
+
+    required_module = calculate_module(
+        design_torque,
+        So,
+        y,
+        z,
+        n,
+        x,
+    )
+
+    module = select_standard_module(required_module)
 
     state = {
         "gear_type": "spur",
         "weaker_member": weaker_member,
-        "power": Power,
-        "pinion_rpm": Np,
-        "gear_rpm": Ng,
-        "gear_ratio": i,
-        "pressure_angle": fi,
-        "service_factor": Cs,
+        "power": power,
+        "pinion_rpm": pinion_rpm,
+        "gear_rpm": gear_rpm,
+        "gear_ratio": gear_ratio,
+        "pressure_angle": pressure_angle,
+        "service_factor": service_factor,
         "factor_of_safety": fos,
-        "gear_system": values["gear_system"],
-        "pinion_modulus": Ep,
-        "gear_modulus": Eg,
-        "pinion_strength": SPut,
-        "gear_strength": SGut,
-        "allowable_pinion_stress": So_p,
-        "allowable_gear_stress": So_g,
-        "pinion_lewis_factor": Yp,
-        "gear_lewis_factor": Yg,
+        "gear_system": data["gear_system"],
+        "pinion_modulus": float(data["pinion_modulus"]),
+        "gear_modulus": float(data["gear_modulus"]),
+        "pinion_strength": pinion_strength,
+        "gear_strength": gear_strength,
+        "allowable_pinion_stress": allowable_pinion,
+        "allowable_gear_stress": allowable_gear,
+        "pinion_lewis_factor": yp,
+        "gear_lewis_factor": yg,
         "pinion_teeth": zp,
         "gear_teeth": zg,
-        "pinion_torque": Tp,
-        "design_torque": T_design,
+        "pinion_torque": pinion_torque,
+        "design_torque": design_torque,
         "face_width_factor": x,
-        "bhn": BHN,
-        "required_module": m_calc,
+        "bhn": bhn,
+        "required_module": required_module,
         "module": module,
-        "module_index": MODULE_STANDARDS.index(module)
+        "module_index": MODULE_STANDARDS.index(module),
     }
 
     return run_checks(state)
 
 
 def continue_spur_design(state, choice, value=None):
-    """Apply the user's chosen option and rerun the safety checks."""
+    state = deepcopy(state)
+
     if state.get("gear_type") != "spur":
-        raise ValueError("This state is not a spur gear design.")
+        raise ValueError("The supplied state is not a spur gear design.")
 
     if state.get("status") != "needs_user_choice":
-        raise ValueError("This design is not waiting for a user choice.")
+        raise ValueError(
+            "The design is not currently waiting for an adjustment."
+        )
+
+    # Validate against currently available choices. This ensures
+    # the selected option is still valid for the supplied design state.
+    available = get_available_options(state)
+    option_ids = {option["id"] for option in available}
+
+    if choice not in option_ids:
+        raise ValueError(
+            "This adjustment is not currently available. "
+            "Choose one of the listed options."
+        )
 
     if choice == 1:
-        if state["face_width_factor"] >= 15:
-            raise ValueError("The face-width factor has already reached 15.")
-
         if value is None:
             raise ValueError("Enter a new face-width factor.")
 
-        try:
-            new_x = float(value)
-        except (TypeError, ValueError):
-            raise ValueError("The new face-width factor must be a number.")
+        new_x = float(value)
+        current_x = float(state["face_width_factor"])
 
-        if not math.isfinite(new_x):
-            raise ValueError("The new face-width factor must be finite.")
-
-        if not state["face_width_factor"] < new_x <= 15:
+        if not current_x < new_x <= MAX_FACE_WIDTH_FACTOR:
             raise ValueError(
-                "The new face-width factor must be higher than the current "
-                "value and no greater than 15."
+                f"Face-width factor must be greater than {current_x} "
+                f"and at most {MAX_FACE_WIDTH_FACTOR}."
             )
 
         state["face_width_factor"] = new_x
-
-        # Recalculate the required module after changing x.
-        y = (
-            state["pinion_lewis_factor"]
-            if state["weaker_member"] == "pinion"
-            else state["gear_lewis_factor"]
-        )
-        z = (
-            state["pinion_teeth"]
-            if state["weaker_member"] == "pinion"
-            else state["gear_teeth"]
-        )
-        n = (
-            state["pinion_rpm"]
-            if state["weaker_member"] == "pinion"
-            else state["gear_rpm"]
-        )
-        So = (
-            state["allowable_pinion_stress"]
-            if state["weaker_member"] == "pinion"
-            else state["allowable_gear_stress"]
-        )
-
-        state["required_module"] = calculate_module(
-            state["design_torque"], So, y, z, n, new_x
-        )
-        state["module"] = select_standard_module(state["required_module"])
-        state["module_index"] = MODULE_STANDARDS.index(state["module"])
+        _recalculate_module(state)
 
     elif choice == 2:
-        if state["face_width_factor"] < 15:
-            raise ValueError(
-                "Increase the face-width factor before choosing option 2."
-            )
-
-        if state["bhn"] >= 400:
-            raise ValueError("BHN has already reached 400.")
-
         if value is None:
-            raise ValueError("Enter a new BHN.")
+            raise ValueError("Enter a new BHN value.")
 
-        try:
-            new_bhn = float(value)
-        except (TypeError, ValueError):
-            raise ValueError("BHN must be a number.")
+        new_bhn = float(value)
+        current_bhn = float(state["bhn"])
 
-        if not math.isfinite(new_bhn):
-            raise ValueError("BHN must be finite.")
-
-        if not state["bhn"] < new_bhn <= 400:
+        if not current_bhn < new_bhn <= MAX_BHN:
             raise ValueError(
-                "The new BHN must be higher than the current value "
-                "and no greater than 400."
+                f"BHN must be greater than {current_bhn} "
+                f"and at most {MAX_BHN}."
             )
 
         if 2.8 * new_bhn - 70 <= 0:
-            raise ValueError("This BHN makes the wear formula invalid.")
+            raise ValueError("The entered BHN is not valid.")
 
         state["bhn"] = new_bhn
 
     elif choice == 3:
-        if state["face_width_factor"] < 15 or state["bhn"] < 400:
-            raise ValueError(
-                "Option 3 is available only after x=15 and BHN=400."
-            )
-
-        next_index = state["module_index"] + 1
+        next_index = int(state["module_index"]) + 1
 
         if next_index >= len(MODULE_STANDARDS):
-            raise ValueError("There is no larger standard module available.")
+            raise ValueError(
+                "There is no higher standard module available."
+            )
 
         state["module_index"] = next_index
         state["module"] = MODULE_STANDARDS[next_index]
-
-    else:
-        raise ValueError("Choose option 1, 2, or 3.")
 
     return run_checks(state)

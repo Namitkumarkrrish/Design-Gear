@@ -12,9 +12,11 @@ const initialGearData = {
   pinionSpeed: 550,
   gearRatio: 3,
   pressureAngle: 20,
+  helixAngle: 23,
   pinionStrength: 580,
   gearStrength: 750,
   serviceFactor: 1.5,
+  wearFactor: 1.25,
   bhn: 350,
   gearSystem: '20fdi',
   factorOfSafety: 2,
@@ -25,53 +27,65 @@ const initialGearData = {
 
 function App() {
   const [gearType, setGearType] = useState('spur');
-  const [gearData, setGearData] = useState(initialGearData);
+  const [gearData, setGearData] = useState({ ...initialGearData });
 
   const [designResponse, setDesignResponse] = useState(null);
   const [designState, setDesignState] = useState(null);
   const [modelUrl, setModelUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   const [error, setError] = useState('');
+  const [modelError, setModelError] = useState('');
 
-  async function generate3DModel(successfulDesign) {
-    const response = await fetch(`${API_URL}/api/gears/spur/model`, {
+  async function requestJson(url, body) {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(successfulDesign),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
       throw new Error(
-        data.detail || `3D model generation failed (${response.status})`
+        data.detail || `Request failed with status ${response.status}`
       );
     }
 
-    if (!data.model_url) {
-      throw new Error('The backend did not return a model URL.');
-    }
-
-    // Change the URL each time to force a fresh model load.
-    setModelUrl(
-      `${data.model_url}?t=${Date.now()}`
-    );
+    return data;
   }
 
-  async function handleGenerate() {
-    if (gearType !== 'spur') {
-      setError('Helical gear design is not connected to the backend yet.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setDesignResponse(null);
-    setDesignState(null);
+  async function generate3DModel(successfulDesign, type) {
+    setModelLoading(true);
+    setModelError('');
     setModelUrl(null);
 
+    try {
+      const endpoint =
+        type === 'helical'
+          ? '/api/gears/helical/model'
+          : '/api/gears/spur/model';
+
+      const data = await requestJson(
+        `${API_URL}${endpoint}`,
+        successfulDesign
+      );
+
+      if (!data.model_url) {
+        throw new Error('The backend did not return a model URL.');
+      }
+
+      setModelUrl(`${data.model_url}?t=${Date.now()}`);
+    } catch (err) {
+      setModelError(
+        err.message || 'The 3D model could not be generated.'
+      );
+    } finally {
+      setModelLoading(false);
+    }
+  }
+
+  function buildDesignRequest() {
     const requestBody = {
       power: Number(gearData.power),
       pinion_rpm: Number(gearData.pinionSpeed),
@@ -81,36 +95,46 @@ function App() {
       gear_strength: Number(gearData.gearStrength),
       service_factor: Number(gearData.serviceFactor),
       bhn: Number(gearData.bhn),
-      gear_system: gearData.gearSystem,
       factor_of_safety: Number(gearData.factorOfSafety),
       pinion_modulus: Number(gearData.pinionModulus),
       gear_modulus: Number(gearData.gearModulus),
       face_width_factor: Number(gearData.faceWidthFactor),
     };
 
+    if (gearType === 'helical') {
+      requestBody.helix_angle = Number(gearData.helixAngle);
+      requestBody.wear_factor = Number(gearData.wearFactor);
+    } else {
+      requestBody.gear_system = gearData.gearSystem;
+    }
+
+    return requestBody;
+  }
+
+  async function handleGenerate() {
+    setLoading(true);
+    setError('');
+    setModelError('');
+    setDesignResponse(null);
+    setDesignState(null);
+    setModelUrl(null);
+
     try {
-      const response = await fetch(`${API_URL}/api/gears/spur/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
+      const endpoint =
+        gearType === 'helical'
+          ? '/api/gears/helical/start'
+          : '/api/gears/spur/start';
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail || `Request failed with status ${response.status}`
-        );
-      }
+      const data = await requestJson(
+        `${API_URL}${endpoint}`,
+        buildDesignRequest()
+      );
 
       setDesignResponse(data);
       setDesignState(data);
 
-      // Generate the 3D model only after the design succeeds.
       if (data.status === 'success') {
-        await generate3DModel(data);
+        await generate3DModel(data, gearType);
       }
     } catch (err) {
       setError(
@@ -127,35 +151,26 @@ function App() {
 
     setLoading(true);
     setError('');
+    setModelError('');
     setModelUrl(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/gears/spur/continue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          state: designState,
-          choice,
-          value,
-        }),
+      const endpoint =
+        gearType === 'helical'
+          ? '/api/gears/helical/continue'
+          : '/api/gears/spur/continue';
+
+      const data = await requestJson(`${API_URL}${endpoint}`, {
+        state: designState,
+        choice,
+        value,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail || `Request failed with status ${response.status}`
-        );
-      }
 
       setDesignResponse(data);
       setDesignState(data);
 
-      // Generate or regenerate the assembly after the final successful retry.
       if (data.status === 'success') {
-        await generate3DModel(data);
+        await generate3DModel(data, gearType);
       }
     } catch (err) {
       setError(err.message || 'Could not continue the gear design.');
@@ -171,8 +186,21 @@ function App() {
     setDesignState(null);
     setModelUrl(null);
     setError('');
+    setModelError('');
     setLoading(false);
+    setModelLoading(false);
   }
+
+  function handleGearTypeChange(nextType) {
+    setGearType(nextType);
+    setDesignResponse(null);
+    setDesignState(null);
+    setModelUrl(null);
+    setError('');
+    setModelError('');
+  }
+
+  const designSucceeded = designResponse?.status === 'success';
 
   return (
     <div className="app">
@@ -206,16 +234,16 @@ function App() {
 
           <GearForm
             gearType={gearType}
-            setGearType={setGearType}
+            setGearType={handleGearTypeChange}
             gearData={gearData}
             setGearData={setGearData}
             onGenerate={handleGenerate}
             onReset={handleReset}
-            loading={loading}
+            loading={loading || modelLoading}
           />
 
           {error && (
-            <p role="alert" style={{ color: '#d9534f' }}>
+            <p role="alert" style={{ color: '#ef4444' }}>
               {error}
             </p>
           )}
@@ -227,7 +255,7 @@ function App() {
           <GearResults
             gearType={gearType}
             designResponse={designResponse}
-            loading={loading}
+            loading={loading || modelLoading}
             onContinue={handleContinue}
           />
         </section>
@@ -238,9 +266,27 @@ function App() {
 
             <GearViewer
               gearType={gearType}
-              generated={designResponse?.status === 'success'}
+              generated={designSucceeded}
               modelUrl={modelUrl}
             />
+
+            {modelLoading && (
+              <p style={{ padding: '0 16px 16px' }}>
+                Generating 3D model...
+              </p>
+            )}
+
+            {modelError && (
+              <p
+                role="alert"
+                style={{
+                  padding: '0 16px 16px',
+                  color: '#ef4444',
+                }}
+              >
+                Model generation failed: {modelError}
+              </p>
+            )}
           </div>
         </section>
       </main>
