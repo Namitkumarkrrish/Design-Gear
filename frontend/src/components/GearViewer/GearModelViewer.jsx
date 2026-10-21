@@ -1,303 +1,251 @@
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import styles from './GearViewer.module.css';
 
-const API_BASE = 'http://127.0.0.1:8000';
+import {
+  createGearScene,
+  resizeGearScene,
+  disposeGearScene,
+} from './viewerUtils/gearScene';
+
+import {
+  loadGearModel,
+  prepareGearModel,
+  identifyGearNodes,
+  disposeObject,
+} from './viewerUtils/gearModel';
+
+import {
+  getVisibleBounds,
+  frameGearView,
+  setGearView,
+} from './viewerUtils/gearViewUtils';
+
+const VIEW_MODES = {
+  assembly: 'Assembly',
+  pinion: 'Pinion Only',
+  gear: 'Gear Only',
+};
 
 function GearModelViewer({
-  gearType,
+  gearType = 'spur',
   generated = false,
   modelUrl = null,
 }) {
   const mountRef = useRef(null);
   const viewerRef = useRef(null);
+  const viewModeRef = useRef('assembly');
+
+  const [viewMode, setViewMode] = useState('assembly');
+
+  const resetView = useCallback(() => {
+    viewerRef.current?.resetView?.();
+  }, []);
+
+  // Keep the current mode available to resize and reset callbacks.
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+    viewerRef.current?.setViewMode?.(viewMode);
+  }, [viewMode]);
+
+  // Return to Assembly when a different gear model is requested.
+  useEffect(() => {
+    setViewMode('assembly');
+  }, [gearType, modelUrl]);
 
   useEffect(() => {
     const mount = mountRef.current;
-    if (!mount) return;
+    if (!mount) return undefined;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#202530');
+    const viewer = createGearScene(mount);
+    const { scene, camera, renderer, controls, grid } = viewer;
 
-    const camera = new THREE.PerspectiveCamera(
-      45,
-      Math.max(mount.clientWidth, 1) /
-        Math.max(mount.clientHeight, 1),
-      0.01,
-      100000
-    );
-
-    camera.position.set(10, 8, 12);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.display = 'block';
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-    renderer.domElement.style.touchAction = 'none';
-
-    mount.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableRotate = true;
-    controls.enableZoom = true;
-    controls.enablePan = true;
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.target.set(0, 0, 0);
-    controls.update();
-    controls.saveState();
-
-    scene.add(new THREE.AmbientLight('#ffffff', 1.5));
-
-    const keyLight = new THREE.DirectionalLight('#ffffff', 3);
-    keyLight.position.set(5, 8, 6);
-    scene.add(keyLight);
-
-    const fillLight = new THREE.DirectionalLight('#ffffff', 2);
-    fillLight.position.set(-5, 4, -6);
-    scene.add(fillLight);
-
-    const sideLight = new THREE.DirectionalLight('#ffffff', 1.5);
-    sideLight.position.set(-6, 2, 4);
-    scene.add(sideLight);
-
-    const grid = new THREE.GridHelper(100, 100, '#8a9bb5', '#465266');
-    scene.add(grid);
-
-    let gearGroup = null;
     let disposed = false;
+    let animationFrame = null;
     let modelLoaded = false;
+    let cancelModelLoad = null;
 
-    const modelMaterial = new THREE.MeshStandardMaterial({
-      color: '#4682b4',
-      metalness: 0.65,
-      roughness: 0.3,
-    });
+    let assemblyRoot = null;
+    let isolatedRoot = null;
+    let isolatedPinions = [];
+    let isolatedGears = [];
 
-    const modelPath = modelUrl
-      ? modelUrl.startsWith('http')
-        ? modelUrl
-        : `${API_BASE}${modelUrl.startsWith('/') ? '' : '/'}${modelUrl}`
-      : null;
+    function fitCurrentView(mode = viewModeRef.current) {
+      if (!modelLoaded) return;
 
-    function frameModel(model) {
-      const bounds = new THREE.Box3().setFromObject(model);
-      const center = bounds.getCenter(new THREE.Vector3());
-      const size = bounds.getSize(new THREE.Vector3());
-      const maxSize = Math.max(size.x, size.y, size.z);
+      const root =
+        mode === 'assembly' ? assemblyRoot : isolatedRoot;
 
-      if (!Number.isFinite(maxSize) || maxSize <= 0) {
-        console.error('The loaded model has invalid dimensions.');
+      frameGearView({
+        bounds: getVisibleBounds(root),
+        camera,
+        controls,
+        grid,
+      });
+    }
+
+    function applyCurrentView(mode) {
+      if (!modelLoaded || !assemblyRoot) return;
+
+      setGearView({
+        mode,
+        assemblyRoot,
+        isolatedRoot,
+        isolatedPinions,
+        isolatedGears,
+        camera,
+        controls,
+        grid,
+      });
+    }
+
+    function createIsolatedCopy(sourceModel, isFallback = false) {
+      const isolatedModel = sourceModel.clone(true);
+
+      isolatedRoot = new THREE.Group();
+      isolatedRoot.add(isolatedModel);
+      scene.add(isolatedRoot);
+
+      // Match the orientation of the assembly.
+      isolatedRoot.rotation.x = -Math.PI / 2;
+      isolatedRoot.updateMatrixWorld(true);
+
+      // Centre the copied model horizontally.
+      const bounds = new THREE.Box3().setFromObject(isolatedRoot);
+
+      if (!bounds.isEmpty()) {
+        const center = bounds.getCenter(new THREE.Vector3());
+
+        isolatedRoot.position.x -= center.x;
+        isolatedRoot.position.z -= center.z;
+        isolatedRoot.updateMatrixWorld(true);
+
+        // Place the bottom of the copy above the ground plane.
+        const updatedBounds = new THREE.Box3().setFromObject(
+          isolatedRoot
+        );
+
+        isolatedRoot.position.y = -updatedBounds.min.y + 0.02;
+      }
+
+      isolatedRoot.updateMatrixWorld(true);
+
+      // Store the initial position to prevent movement accumulating
+      // when switching between Pinion Only and Gear Only.
+      isolatedRoot.userData.basePosition =
+        isolatedRoot.position.clone();
+
+      const nodes = identifyGearNodes(isolatedModel);
+
+      isolatedPinions = nodes.pinions;
+      isolatedGears = nodes.gears;
+
+      // A fallback is one illustrative gear, not a gear pair.
+      if (isFallback && isolatedPinions.length === 0) {
+        isolatedPinions = [isolatedModel];
+        isolatedGears = [];
+      }
+    }
+
+    function handleModelLoaded({ model, isFallback = false }) {
+      if (disposed) {
+        disposeObject(model);
         return;
       }
 
-      model.position.sub(center);
+      try {
+        model.traverse((object) => {
+          if (!object.isMesh) return;
 
-      gearGroup = new THREE.Group();
-      gearGroup.add(model);
-      scene.add(gearGroup);
+          object.castShadow = true;
+          object.receiveShadow = true;
+        });
 
-      gearGroup.rotation.x = -Math.PI / 2;
-      gearGroup.updateMatrixWorld(true);
+        assemblyRoot = new THREE.Group();
+        scene.add(assemblyRoot);
 
-      const rotatedBounds = new THREE.Box3().setFromObject(gearGroup);
-      gearGroup.position.y = -rotatedBounds.min.y + Math.max(maxSize * 0.08, 0.5);
-      gearGroup.updateMatrixWorld(true);
+        prepareGearModel(model, assemblyRoot);
+        createIsolatedCopy(model, isFallback);
 
-      grid.scale.setScalar(Math.max(maxSize / 20, 0.1));
-      grid.position.set(0, 0, 0);
+        modelLoaded = true;
 
-      const finalBounds = new THREE.Box3().setFromObject(gearGroup);
-      const target = finalBounds.getCenter(new THREE.Vector3());
-      controls.target.copy(target);
+        // Start with the full assembly visible.
+        assemblyRoot.visible = true;
+        isolatedRoot.visible = false;
 
-      const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-      const horizontalFov =
-        2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
-
-      const limitingFov = Math.min(verticalFov, horizontalFov);
-      const distance = Math.max(
-        (maxSize * 0.65) / Math.tan(limitingFov / 2),
-        maxSize * 2,
-        5
-      );
-
-      camera.position.set(
-        target.x + distance * 0.8,
-        target.y + distance * 0.5,
-        target.z + distance
-      );
-
-      camera.near = Math.max(maxSize / 1000, 0.01);
-      camera.far = Math.max(maxSize * 100, 1000);
-      camera.updateProjectionMatrix();
-
-      controls.minDistance = Math.max(maxSize * 0.25, 0.1);
-      controls.maxDistance = Math.max(maxSize * 100, 100);
-      controls.update();
-      controls.saveState();
-
-      modelLoaded = true;
+        fitCurrentView('assembly');
+      } catch (error) {
+        console.error('Could not prepare gear model:', error);
+      }
     }
 
-    function createSpurFallback() {
-      const group = new THREE.Group();
-      const radius = 2;
-      const thickness = 0.65;
-      const toothCount = 24;
+    cancelModelLoad = loadGearModel({
+      gearType,
+      modelUrl,
+      onLoad: handleModelLoaded,
+      onError: (error) => {
+        if (!disposed) {
+          console.error('Gear model loading failed:', error);
+        }
+      },
+    });
 
-      group.add(
-        new THREE.Mesh(
-          new THREE.CylinderGeometry(radius, radius, thickness, 96),
-          modelMaterial
-        )
-      );
-
-      for (let i = 0; i < toothCount; i++) {
-        const angle = (i / toothCount) * Math.PI * 2;
-        const tooth = new THREE.Mesh(
-          new THREE.BoxGeometry(0.48, thickness, 0.3),
-          modelMaterial
-        );
-
-        tooth.position.set(
-          Math.cos(angle) * (radius + 0.12),
-          0,
-          Math.sin(angle) * (radius + 0.12)
-        );
-
-        tooth.rotation.y = -angle;
-        group.add(tooth);
+    function resetCamera() {
+      if (!modelLoaded) {
+        controls.reset();
+        return;
       }
 
-      const boreMaterial = new THREE.MeshStandardMaterial({
-        color: '#202530',
-        metalness: 0.3,
-        roughness: 0.8,
-      });
-
-      group.add(
-        new THREE.Mesh(
-          new THREE.CylinderGeometry(0.45, 0.45, thickness + 0.1, 48),
-          boreMaterial
-        )
-      );
-
-      const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.72, 0.72, 0.2, 48),
-        modelMaterial
-      );
-      hub.position.y = thickness / 2 + 0.08;
-      group.add(hub);
-
-      const hubBore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.45, 0.45, 0.4, 48),
-        boreMaterial
-      );
-      hubBore.position.y = hub.position.y;
-      group.add(hubBore);
-
-      return group;
+      fitCurrentView(viewModeRef.current);
     }
 
-    if (modelPath) {
-      const loader = new GLTFLoader();
+    viewerRef.current = {
+      resetView: resetCamera,
+      setViewMode: applyCurrentView,
+    };
 
-      loader.load(
-        modelPath,
-        (gltf) => {
-          if (disposed) {
-            gltf.scene.traverse((object) => {
-              if (object.geometry) object.geometry.dispose();
-            });
-            return;
-          }
+    // Resize the renderer when its container changes size.
+    const resizeObserver = new ResizeObserver(() => {
+      if (!mount.clientWidth || !mount.clientHeight) return;
 
-          gltf.scene.traverse((child) => {
-            if (!child.isMesh) return;
+      resizeGearScene(camera, renderer, mount);
 
-            if (!child.material) {
-              child.material = modelMaterial;
-            }
+      if (modelLoaded) {
+        fitCurrentView(viewModeRef.current);
+      }
+    });
 
-            child.castShadow = true;
-            child.receiveShadow = true;
-          });
+    resizeObserver.observe(mount);
 
-          frameModel(gltf.scene);
-        },
-        undefined,
-        (error) => {
-          if (disposed) return;
-
-          console.error(`Could not load model: ${modelPath}`, error);
-
-          // Never display a fake spur gear in place of a helical model.
-          if (gearType === 'spur') {
-            frameModel(createSpurFallback());
-          }
-        }
-      );
-    }
-
-    function resetView() {
-      controls.reset();
-      if (gearGroup && modelLoaded) controls.update();
-    }
-
-    viewerRef.current = { resetView };
-
-    let animationFrame;
-
+    // Render loop.
     function animate() {
       if (disposed) return;
 
       animationFrame = requestAnimationFrame(animate);
+
       controls.update();
       renderer.render(scene, camera);
     }
 
     animate();
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (!mount.clientWidth || !mount.clientHeight) return;
-
-      camera.aspect = mount.clientWidth / mount.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(mount.clientWidth, mount.clientHeight);
-    });
-
-    resizeObserver.observe(mount);
-
     return () => {
       disposed = true;
-      cancelAnimationFrame(animationFrame);
-      resizeObserver.disconnect();
-      controls.dispose();
 
-      scene.traverse((object) => {
-        if (object.geometry) object.geometry.dispose();
-
-        if (object.material) {
-          const materials = Array.isArray(object.material)
-            ? object.material
-            : [object.material];
-
-          materials.forEach((material) => material.dispose());
-        }
-      });
-
-      renderer.dispose();
-
-      if (renderer.domElement.parentNode === mount) {
-        mount.removeChild(renderer.domElement);
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
       }
+
+      cancelModelLoad?.();
+      resizeObserver.disconnect();
+
+      disposeGearScene({
+        scene,
+        renderer,
+        controls,
+        mount,
+      });
 
       viewerRef.current = null;
     };
@@ -305,34 +253,57 @@ function GearModelViewer({
 
   return (
     <div className={styles.container}>
+      <div
+        className={styles.viewModes}
+        aria-label="Gear viewing mode"
+      >
+        {Object.entries(VIEW_MODES).map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            className={`${styles.modeButton} ${
+              viewMode === mode
+                ? styles.modeButtonActive
+                : ''
+            }`}
+            aria-pressed={viewMode === mode}
+            onClick={() => setViewMode(mode)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.viewer} ref={mountRef} />
 
       <div className={styles.toolbar}>
         <div className={styles.modelInfo}>
           <span className={styles.statusDot} />
+
           {modelUrl
             ? 'Generated 3D model'
             : generated
-              ? 'Design successful — model unavailable'
-              : 'Waiting for generated model'}
+              ? 'Design successful'
+              : 'Sample model'}
 
           <span className={styles.typeLabel}>
             {gearType === 'spur' ? 'Spur' : 'Helical'}
           </span>
+
+          <span className={styles.viewLabel}>
+            {VIEW_MODES[viewMode]}
+          </span>
         </div>
 
         <div className={styles.controls}>
-          <button
-            type="button"
-            onClick={() => viewerRef.current?.resetView?.()}
-          >
+          <button type="button" onClick={resetView}>
             Reset View
           </button>
         </div>
       </div>
 
       <p className={styles.hint}>
-        Drag to rotate freely · Right-drag to pan · Scroll to zoom
+        Drag to rotate · Right-drag to pan · Scroll to zoom
       </p>
     </div>
   );

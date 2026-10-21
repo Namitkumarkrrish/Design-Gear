@@ -1,18 +1,60 @@
 
 .container {
-  display: flex;
-  flex-direction: column;
   width: 100%;
-  min-width: 0;
   overflow: hidden;
   background: #f1eee5;
 }
 
+.viewModes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px;
+  background: #fbf8f0;
+  border-bottom: 1px solid #dcd5c5;
+}
+
+.modeButton {
+  padding: 8px 12px;
+  color: #625c4e;
+  background: #fffdf7;
+  border: 1px solid #dcd5c5;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.modeButton:hover {
+  color: #963c25;
+  border-color: #b64e32;
+}
+
+.modeButtonActive {
+  color: #fffaf0;
+  background: #b64e32;
+  border-color: #b64e32;
+}
+
+.modeButtonActive:hover {
+  color: #fffaf0;
+  background: #963c25;
+  border-color: #963c25;
+}
+
+.modeButton:focus-visible {
+  outline: 2px solid #b64e32;
+  outline-offset: 2px;
+}
+
 .viewer {
-  position: relative;
   width: 100%;
   height: 430px;
-  min-height: 260px;
+  min-height: 0;
   overflow: hidden;
   cursor: grab;
   background: #f1eee5;
@@ -52,12 +94,14 @@
 .statusDot {
   width: 7px;
   height: 7px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: #667044;
   box-shadow: 0 0 0 3px rgb(102 112 68 / 12%);
 }
 
-.typeLabel {
+.typeLabel,
+.viewLabel {
   padding: 4px 8px;
   color: #963c25;
   background: #f4e9dd;
@@ -67,6 +111,12 @@
   font-size: 10px;
 }
 
+.viewLabel {
+  color: #626b40;
+  background: #f0f0e4;
+  border-color: #d9dbc6;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;
@@ -74,7 +124,7 @@
 }
 
 .controls button {
-  padding: 9px 12px;
+  padding: 7px 10px;
   color: #514c40;
   background: #fffdf7;
   border: 1px solid #dcd5c5;
@@ -82,13 +132,14 @@
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease,
-    background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .controls button:hover {
   color: #b64e32;
-  background: #f4e9dd;
   border-color: #b64e32;
 }
 
@@ -106,33 +157,45 @@
   line-height: 1.6;
 }
 
-/* Fullscreen mode */
-.container:fullscreen {
-  display: flex;
-  flex-direction: column;
+/* Full-screen viewer */
+.container:fullscreen,
+.fullscreenContainer {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: #f1eee5;
 }
 
-.container:fullscreen .viewer {
+.container:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  border: 0;
+}
+
+/* Keep the toolbar and view buttons visible while the canvas grows. */
+.fullscreenContainer .viewModes {
+  flex: 0 0 auto;
+}
+
+.fullscreenContainer .viewer {
   flex: 1 1 auto;
   width: 100%;
   height: auto;
   min-height: 0;
 }
 
-.container:fullscreen .toolbar {
+.fullscreenContainer .toolbar {
   flex: 0 0 auto;
-  padding: 16px 22px;
 }
 
-.container:fullscreen .hint {
+.fullscreenContainer .hint {
   flex: 0 0 auto;
-  padding: 0 22px 16px;
+  padding-bottom: 12px;
 }
 
 @media (max-width: 700px) {
@@ -145,19 +208,21 @@
     flex-direction: column;
   }
 
-  .container:fullscreen .toolbar {
-    padding: 12px;
+  .viewModes {
+    gap: 6px;
+    padding: 10px;
   }
 
-  .container:fullscreen .hint {
-    padding: 0 12px 12px;
+  .modeButton {
+    padding: 8px 9px;
+    font-size: 10px;
   }
 
-  .controls {
-    width: 100%;
+  .fullscreenContainer .toolbar {
+    flex-direction: column;
   }
 
-  .controls button {
-    flex: 1;
+  .fullscreenContainer .viewer {
+    height: auto;
   }
 }
