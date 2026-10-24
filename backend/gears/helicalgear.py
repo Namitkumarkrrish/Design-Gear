@@ -12,7 +12,21 @@ MODULE_STANDARDS = [
 MAX_BHN = 400.0
 MIN_BHN = 25.0
 
-
+def read_bore_inputs(data):
+    bores = {}
+    for key in ("pinion_bore", "gear_bore"):      # handle both bore values
+        raw = data.get(key, 0)                     # missing → 0
+        if raw in (None, ""):                      # empty → 0
+            raw = 0
+        try:
+            value = float(raw)                     # convert to number
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be numeric.")
+        if not math.isfinite(value) or value < 0:  # reject negative / NaN / infinity
+            raise ValueError(f"{key} must be zero or a positive number.")
+        bores[key] = value
+    return bores
+    
 def validate_inputs(data):
     required = [
         "power", "gear_ratio", "pinion_rpm",
@@ -328,6 +342,7 @@ def run_checks(state):
 def start_helical_design(data):
     values = validate_inputs(data)
 
+    bores = read_bore_inputs(data)
     power = values["power"]
     ratio = values["gear_ratio"]
     rpm = values["pinion_rpm"]
@@ -400,6 +415,8 @@ def start_helical_design(data):
         raise ValueError("BHN cannot exceed 400.")
 
     state = {
+        "pinion_bore": bores["pinion_bore"],
+        "gear_bore": bores["gear_bore"],
         "gear_type": "helical",
         "status": "calculating",
         "power": power,
