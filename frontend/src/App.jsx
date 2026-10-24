@@ -106,7 +106,7 @@ function App() {
       requestBody.gear_bore = gearData.boreEnabled
         ? Number(gearData.gearBore)
         : 0;
-    };
+       
 
     if (gearType === 'helical') {
       requestBody.helix_angle = Number(gearData.helixAngle);
