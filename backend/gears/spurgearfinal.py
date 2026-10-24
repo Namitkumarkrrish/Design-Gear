@@ -29,6 +29,20 @@ def _number(data, key, default=None):
 
     return value
 
+def read_bore_inputs(data):
+    bores = {}
+    for key in ("pinion_bore", "gear_bore"):      # handle both bore values
+        raw = data.get(key, 0)                     # missing → 0
+        if raw in (None, ""):                      # empty → 0
+            raw = 0
+        try:
+            value = float(raw)                     # convert to number
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be numeric.")
+        if not math.isfinite(value) or value < 0:  # reject negative / NaN / infinity
+            raise ValueError(f"{key} must be zero or a positive number.")
+        bores[key] = value
+    return bores
 
 def validate_inputs(data):
     required = [
@@ -379,7 +393,8 @@ def start_spur_design(data):
     fos = float(data["factor_of_safety"])
     x = float(data["face_width_factor"])
     bhn = float(data["bhn"])
-
+    bores = read_bore_inputs(data)
+    
     pinion_strength = float(data["pinion_strength"])
     gear_strength = float(data["gear_strength"])
 
@@ -438,6 +453,8 @@ def start_spur_design(data):
     module = select_standard_module(required_module)
 
     state = {
+        "pinion_bore": bores["pinion_bore"],
+        "gear_bore": bores["gear_bore"],
         "gear_type": "spur",
         "weaker_member": weaker_member,
         "power": power,
