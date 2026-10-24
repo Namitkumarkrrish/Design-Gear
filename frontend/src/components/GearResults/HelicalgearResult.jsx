@@ -107,6 +107,22 @@ function HelicalgearResult({ designResponse, loading, onContinue }) {
       unit: 'mm',
     },
     {
+      label: 'Pinion Bore',
+      value:
+        Number(designResponse.pinion_bore) > 0
+          ? format(designResponse.pinion_bore)
+          : 'None',
+      unit: Number(designResponse.pinion_bore) > 0 ? 'mm' : '',
+    },
+    {
+      label: 'Gear Bore',
+      value:
+        Number(designResponse.gear_bore) > 0
+          ? format(designResponse.gear_bore)
+          : 'None',
+      unit: Number(designResponse.gear_bore) > 0 ? 'mm' : '',
+    },
+    {
       label: 'Face-Width Factor',
       value: format(
         result.face_width_factor ?? designResponse.face_width_factor
