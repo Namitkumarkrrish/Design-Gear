@@ -30,6 +30,14 @@ def _validate_gear_pair(
         # Equal tooth counts are mechanically possible, so no rejection here.
         pass
 
+def _read_bore(state: dict, key: str):
+    raw = state.get(key, 0)
+    if raw in (None, ""):
+        return None
+    value = float(raw)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{key} must be zero or a positive number.")
+    return value if value > 0 else None
 
 def _position_gear_pair(
     pinion,
@@ -111,12 +119,16 @@ def generate_spur_gear_model(state: dict) -> str:
         gear_teeth,
     )
 
+    pinion_bore = _read_bore(state, "pinion_bore")
+    gear_bore = _read_bore(state, "gear_bore")
+    
     pinion = SpurGear(
         module=module,
         teeth_number=pinion_teeth,
         width=face_width,
         pressure_angle=pressure_angle,
         helix_angle=0.0,
+        bore_d=pinion_bore, 
     ).build()
 
     gear = SpurGear(
@@ -125,6 +137,7 @@ def generate_spur_gear_model(state: dict) -> str:
         width=face_width,
         pressure_angle=pressure_angle,
         helix_angle=0.0,
+        bore_d=gear_bore,
     ).build()
 
     return _position_gear_pair(
@@ -204,6 +217,9 @@ def generate_helical_gear_model(state: dict) -> str:
     beta = math.radians(helix_angle)
     transverse_module = normal_module / math.cos(beta)
 
+    pinion_bore = _read_bore(state, "pinion_bore")
+    gear_bore = _read_bore(state, "gear_bore")
+    
     # External helical gears require opposite helix hands.
     pinion = SpurGear(
         module=transverse_module,
@@ -211,6 +227,8 @@ def generate_helical_gear_model(state: dict) -> str:
         width=face_width,
         pressure_angle=pressure_angle,
         helix_angle=helix_angle,
+        bore_d=pinion_bore,
+        
     ).build()
 
     gear = SpurGear(
@@ -219,6 +237,8 @@ def generate_helical_gear_model(state: dict) -> str:
         width=face_width,
         pressure_angle=pressure_angle,
         helix_angle=-helix_angle,
+        bore_d=gear_bore,
+        
     ).build()
 
     return _position_gear_pair(
