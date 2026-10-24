@@ -23,6 +23,9 @@ const initialGearData = {
   pinionModulus: 210000,
   gearModulus: 210000,
   faceWidthFactor: 12,
+  boreEnabled: false,   // line 26
+  pinionBore: 30,       // line 27
+  gearBore: 50,         // line 28
 };
 
 function App() {
@@ -96,6 +99,13 @@ function App() {
       pinion_modulus: Number(gearData.pinionModulus),
       gear_modulus: Number(gearData.gearModulus),
       face_width_factor: Number(gearData.faceWidthFactor),
+      // Bore holes: 0 means a solid gear with no bore.
+      requestBody.pinion_bore = gearData.boreEnabled
+        ? Number(gearData.pinionBore)
+        : 0;
+      requestBody.gear_bore = gearData.boreEnabled
+        ? Number(gearData.gearBore)
+        : 0;
     };
 
     if (gearType === 'helical') {
