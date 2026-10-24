@@ -29,7 +29,14 @@ function GearForm({
       [name]: value,
     }));
   }
+  function handleCheckboxChange(event) {
+  const { name, checked } = event.target;
 
+  setGearData((previousData) => ({
+    ...previousData,
+    [name]: checked,
+  }));
+  }
   function field(label, name, min = '0.1', step = 'any', max) {
     return (
       <div className={styles.field} key={name}>
@@ -109,6 +116,27 @@ function GearForm({
       {field('Gear Young’s Modulus (MPa)', 'gearModulus', '1')}
       {field('Face-Width Factor (maximum 15)', 'faceWidthFactor', '1', 'any', '15')}
 
+       <div className={styles.field}>
+        <label htmlFor="boreEnabled">
+          <input
+            id="boreEnabled"
+            name="boreEnabled"
+            type="checkbox"
+            checked={Boolean(gearData.boreEnabled)}
+            onChange={handleCheckboxChange}
+            disabled={loading}
+          />{' '}
+          Add bore hole
+        </label>
+      </div>
+
+      {gearData.boreEnabled && (
+        <>
+          {field('Pinion Bore Diameter (mm)', 'pinionBore', '1', 'any')}
+          {field('Gear Bore Diameter (mm)', 'gearBore', '1', 'any')}
+        </>
+      )}
+      
       <div className={styles.buttons}>
         <button
           className={styles.generateButton}
