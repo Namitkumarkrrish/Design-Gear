@@ -16,9 +16,14 @@ from gears.helicalgear import (
     start_helical_design,
     continue_helical_design,
 )
+from gears.bevelgear import (
+    start_bevel_design,
+    continue_bevel_design,
+)
 from gears.gear_model_generator import (
     generate_spur_gear_model,
     generate_helical_gear_model,
+    generate_bevel_gear_model,
 )
 
 
@@ -158,4 +163,57 @@ def generate_helical_model(state: dict[str, Any]):
         raise HTTPException(
             status_code=500,
             detail=f"Helical model generation failed: {error}",
+        )
+
+
+# ---------------- BEVEL GEAR ENDPOINTS ----------------
+
+@app.post("/api/gears/bevel/start")
+def start_bevel(data: dict[str, Any]):
+    try:
+        return start_bevel_design(data)
+    except (
+        ValueError,
+        KeyError,
+        TypeError,
+        ZeroDivisionError,
+        OverflowError,
+    ) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/api/gears/bevel/continue")
+def continue_bevel(request: ContinueDesignRequest):
+    try:
+        return continue_bevel_design(
+            deepcopy(request.state),
+            request.choice,
+            request.value,
+        )
+    except (
+        ValueError,
+        KeyError,
+        TypeError,
+        ZeroDivisionError,
+        OverflowError,
+    ) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/api/gears/bevel/model")
+def generate_bevel_model(state: dict[str, Any]):
+    try:
+        output_path = generate_bevel_gear_model(state)
+
+        return {
+            "message": "Bevel 3D model generated successfully",
+            "filename": Path(output_path).name,
+            "model_url": "/generated/" + Path(output_path).name,
+        }
+    except (ValueError, KeyError, TypeError, RuntimeError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Bevel model generation failed: {error}",
         )
