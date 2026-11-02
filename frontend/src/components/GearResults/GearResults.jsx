@@ -2,6 +2,7 @@
 import styles from './GearResults.module.css';
 import SpurgearResult from './SpurgearResult';
 import HelicalgearResult from './HelicalgearResult';
+import BevelgearResult from './BevelgearResult';
 
 function GearResults({ gearType, designResponse, loading, onContinue }) {
   if (!designResponse) {
@@ -26,6 +27,10 @@ function GearResults({ gearType, designResponse, loading, onContinue }) {
 
   if (gearType === 'helical') {
     return <HelicalgearResult {...props} />;
+  }
+
+  if (gearType === 'bevel') {
+    return <BevelgearResult {...props} />;
   }
 
   return <SpurgearResult {...props} />;
