@@ -7,6 +7,7 @@ const API_BASE = 'http://127.0.0.1:8000';
 const MODEL_PATHS = {
   spur: '/models/spur_gear.glb',
   helical: '/models/helical_gear.glb',
+  bevel: '/models/bevel_gear.glb',
 };
 
 function resolveModelUrl(gearType = 'spur', modelUrl = null) {
@@ -206,9 +207,17 @@ export function identifyGearNodes(model) {
 
     if (name?.includes('gear_design_studio')) return;
 
-    if (name === 'pinion' || name === 'helical_pinion') {
+    if (
+      name === 'pinion' ||
+      name === 'helical_pinion' ||
+      name === 'bevel_pinion'
+    ) {
       pinions.push(child);
-    } else if (name === 'gear' || name === 'helical_gear') {
+    } else if (
+      name === 'gear' ||
+      name === 'helical_gear' ||
+      name === 'bevel_gear'
+    ) {
       gears.push(child);
     }
   });
