@@ -22,6 +22,12 @@ import {
   setGearView,
 } from './viewerUtils/gearViewUtils';
 
+const TYPE_LABELS = {
+  spur: 'Spur',
+  helical: 'Helical',
+  bevel: 'Bevel',
+};
+
 const VIEW_MODES = {
   assembly: 'Assembly',
   pinion: 'Pinion Only',
@@ -287,7 +293,7 @@ function GearModelViewer({
               : 'Sample model'}
 
           <span className={styles.typeLabel}>
-            {gearType === 'spur' ? 'Spur' : 'Helical'}
+            {TYPE_LABELS[gearType] ?? 'Spur'}
           </span>
 
           <span className={styles.viewLabel}>
