@@ -7,6 +7,19 @@ import './App.css';
 
 const API_URL = 'http://127.0.0.1:8000';
 
+// Base API path of every gear type (…/start, …/continue, …/model).
+const GEAR_API = {
+  spur: '/api/gears/spur',
+  helical: '/api/gears/helical',
+  bevel: '/api/gears/bevel',
+};
+
+const GEAR_EYEBROWS = {
+  spur: 'Spur gears · Lewis & Buckingham',
+  helical: 'Helical gears · Bending & wear',
+  bevel: 'Bevel gears · Cone geometry & dynamic load',
+};
+
 const initialGearData = {
   power: 23,
   pinionSpeed: 550,
@@ -26,6 +39,11 @@ const initialGearData = {
   boreEnabled: false,
   pinionBore: 30,
   gearBore: 50,
+  // Bevel gears only
+  shaftAngle: 90,
+  pinionTeeth: 18,
+  loadingFactor: 1,
+  accuracyClass: 'it7',
 };
 
 function App() {
@@ -63,10 +81,7 @@ function App() {
     setModelUrl(null);
 
     try {
-      const endpoint =
-        type === 'helical'
-          ? '/api/gears/helical/model'
-          : '/api/gears/spur/model';
+      const endpoint = `${GEAR_API[type] ?? GEAR_API.spur}/model`;
 
       const data = await requestJson(
         `${API_URL}${endpoint}`,
@@ -79,9 +94,7 @@ function App() {
 
       setModelUrl(`${data.model_url}?t=${Date.now()}`);
     } catch (err) {
-      setModelError(
-        err.message || 'The 3D model could not be generated.'
-      );
+      setModelError(err.message || 'The 3D model could not be generated.');
     } finally {
       setModelLoading(false);
     }
@@ -101,20 +114,25 @@ function App() {
       pinion_modulus: Number(gearData.pinionModulus),
       gear_modulus: Number(gearData.gearModulus),
       face_width_factor: Number(gearData.faceWidthFactor),
-
-      // Bore diameter is zero when bore holes are disabled.
-      pinion_bore: gearData.boreEnabled
-        ? Number(gearData.pinionBore)
-        : 0,
-
-      gear_bore: gearData.boreEnabled
-        ? Number(gearData.gearBore)
-        : 0,
     };
+
+    // Bore holes: 0 means a solid gear with no bore.
+    requestBody.pinion_bore = gearData.boreEnabled
+      ? Number(gearData.pinionBore)
+      : 0;
+    requestBody.gear_bore = gearData.boreEnabled
+      ? Number(gearData.gearBore)
+      : 0;
 
     if (gearType === 'helical') {
       requestBody.helix_angle = Number(gearData.helixAngle);
       requestBody.wear_factor = Number(gearData.wearFactor);
+    } else if (gearType === 'bevel') {
+      requestBody.gear_system = gearData.gearSystem;
+      requestBody.shaft_angle = Number(gearData.shaftAngle);
+      requestBody.pinion_teeth = Number(gearData.pinionTeeth);
+      requestBody.loading_factor = Number(gearData.loadingFactor);
+      requestBody.accuracy_class = gearData.accuracyClass;
     } else {
       requestBody.gear_system = gearData.gearSystem;
     }
@@ -131,10 +149,7 @@ function App() {
     setModelUrl(null);
 
     try {
-      const endpoint =
-        gearType === 'helical'
-          ? '/api/gears/helical/start'
-          : '/api/gears/spur/start';
+      const endpoint = `${GEAR_API[gearType] ?? GEAR_API.spur}/start`;
 
       const data = await requestJson(
         `${API_URL}${endpoint}`,
@@ -166,10 +181,7 @@ function App() {
     setModelUrl(null);
 
     try {
-      const endpoint =
-        gearType === 'helical'
-          ? '/api/gears/helical/continue'
-          : '/api/gears/spur/continue';
+      const endpoint = `${GEAR_API[gearType] ?? GEAR_API.spur}/continue`;
 
       const data = await requestJson(`${API_URL}${endpoint}`, {
         state: designState,
@@ -212,7 +224,6 @@ function App() {
   }
 
   const designSucceeded = designResponse?.status === 'success';
-  const isHelical = gearType === 'helical';
 
   function scrollToDesign() {
     document.getElementById('design-workspace')?.scrollIntoView({
@@ -287,9 +298,7 @@ function App() {
       <section className="hero">
         <div className="hero-copy">
           <div className="eyebrow">
-            {isHelical
-              ? 'Helical gears · Bending & wear'
-              : 'Spur gears · Lewis & Buckingham'}
+            {GEAR_EYEBROWS[gearType]}
           </div>
 
           <h2>
@@ -339,7 +348,7 @@ function App() {
         </div>
 
         <span className="dashboard-index">
-          ENGINEERING / {isHelical ? 'HELICAL' : 'SPUR'}
+          ENGINEERING / {gearType.toUpperCase()}
         </span>
       </div>
 
