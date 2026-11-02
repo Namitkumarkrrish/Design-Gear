@@ -11,6 +11,7 @@ function GearForm({
   loading,
 }) {
   const isHelical = gearType === 'helical';
+  const isBevel = gearType === 'bevel';
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -29,14 +30,16 @@ function GearForm({
       [name]: value,
     }));
   }
-  function handleCheckboxChange(event) {
-  const { name, checked } = event.target;
 
-  setGearData((previousData) => ({
-    ...previousData,
-    [name]: checked,
-  }));
+  function handleCheckboxChange(event) {
+    const { name, checked } = event.target;
+
+    setGearData((previousData) => ({
+      ...previousData,
+      [name]: checked,
+    }));
   }
+
   function field(label, name, min = '0.1', step = 'any', max) {
     return (
       <div className={styles.field} key={name}>
@@ -75,13 +78,15 @@ function GearForm({
         >
           <option value="spur">Spur Gear</option>
           <option value="helical">Helical Gear</option>
+          <option value="bevel">Bevel Gear</option>
         </select>
       </div>
 
       {field('Power (kW)', 'power')}
       {field('Pinion Speed (RPM)', 'pinionSpeed', '1', '1')}
       {field('Gear Ratio (Np / Ng)', 'gearRatio', '1', 'any')}
-      {field('Pressure Angle (°)', 'pressureAngle', '0.1', 'any', '89')}
+      {!isBevel &&
+        field('Pressure Angle (°)', 'pressureAngle', '0.1', 'any', '89')}
 
       {isHelical &&
         field('Helix Angle (°)', 'helixAngle', '0.1', 'any', '89')}
@@ -103,6 +108,31 @@ function GearForm({
         </div>
       )}
 
+      {isBevel && (
+        <>
+          {field('Shaft Angle Σ (°, 30 – 90)', 'shaftAngle', '30', 'any', '90')}
+          {field('Number of Pinion Teeth', 'pinionTeeth', '5', '1')}
+          {field('Loading Factor (Cw)', 'loadingFactor', '0.1')}
+
+          <div className={styles.field}>
+            <label htmlFor="accuracyClass">
+              Gear Accuracy Class (dynamic load)
+            </label>
+            <select
+              id="accuracyClass"
+              name="accuracyClass"
+              value={gearData.accuracyClass}
+              onChange={handleSelectChange}
+              disabled={loading}
+            >
+              <option value="it7">IT7</option>
+              <option value="it8">IT8</option>
+              <option value="it9">IT9</option>
+            </select>
+          </div>
+        </>
+      )}
+
       {field('Pinion Ultimate Strength (MPa)', 'pinionStrength')}
       {field('Gear Ultimate Strength (MPa)', 'gearStrength')}
       {field('Service Factor', 'serviceFactor', '1')}
@@ -116,7 +146,7 @@ function GearForm({
       {field('Gear Young’s Modulus (MPa)', 'gearModulus', '1')}
       {field('Face-Width Factor (maximum 15)', 'faceWidthFactor', '1', 'any', '15')}
 
-       <div className={styles.field}>
+      <div className={styles.field}>
         <label htmlFor="boreEnabled">
           <input
             id="boreEnabled"
@@ -136,7 +166,7 @@ function GearForm({
           {field('Gear Bore Diameter (mm)', 'gearBore', '1', 'any')}
         </>
       )}
-      
+
       <div className={styles.buttons}>
         <button
           className={styles.generateButton}
@@ -160,6 +190,15 @@ function GearForm({
         <p>
           Helical design uses the helix angle and wear factor in addition
           to the common gear parameters.
+        </p>
+      )}
+
+      {isBevel && (
+        <p>
+          Straight bevel design uses the shaft angle, pinion teeth,
+          loading factor and accuracy class in addition to the common gear
+          parameters. The pressure angle comes from the selected gear
+          standard, and a face-width factor of 8 to 10 is typical.
         </p>
       )}
     </form>
